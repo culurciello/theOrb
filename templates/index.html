@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orb - AI Knowledge Agent</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+
+    <!-- Title and Icon -->
+    <div class="orb-header">
+        <div class="orb-header-left">
+            <img src="/static/icon-dark.png" alt="Orb Icon" class="orb-icon" id="orbIcon" style="width:32px;height:32px;vertical-align:middle;margin-right:8px;">
+            <span class="orb-title" style="font-size:1.5em;font-weight:bold;vertical-align:middle;">Orvin Orb</span>
+        </div>
+        <div class="orb-header-right">
+            <button class="theme-toggle-btn" onclick="toggleTheme()" title="Switch Theme">🌙</button>
+        </div>
+    </div>
+    <!-- <div style="height:16px;"></div> -->
+    <!-- <div class="status-text">Click the orb to expand</div> -->
+
+    <!-- Main Orb -->
+    <div class="orvin-orb" id="mainOrb"></div>
+
+    <!-- Vertical Button Column -->
+    <div class="vertical-buttons" id="verticalButtons">
+        <!-- <div class="vertical-button" data-panel="voice"></div> -->
+        <div class="vertical-button" data-panel="collections"></div>
+        <div class="vertical-button" data-panel="chat"></div>
+        <!-- <div class="vertical-button" data-panel="documents"></div> -->
+        <div class="vertical-button" data-panel="settings"></div>
+    </div>
+
+    <!-- Horizontal Button Row -->
+    <div class="horizontal-buttons" id="horizontalButtons">
+        <!-- <div class="horizontal-button" data-action="command"></div> -->
+        <!-- <div class="horizontal-button" data-action="suggest"></div> -->
+        <!-- <div class="horizontal-button" data-action="upload"></div> -->
+    </div>
+
+    <!-- Expanded Panel -->
+    <div class="expanded-panel" id="expandedPanel">
+        <div class="panel-header" id="panelHeader">Welcome to Orb</div>
+        <div class="panel-content" id="panelContent">
+            <div class="panel-text">
+                Click any button to see Orb's features in action.
+            </div>
+        </div>
+    </div>
+
+    <!-- Smart Suggestion -->
+    <div class="smart-suggestion" id="smartSuggestion">
+        <div>💡 Save this insight to your Knowledge Tree?</div>
+        <div class="suggestion-buttons">
+            <button class="suggestion-btn" onclick="hideSuggestion()">Save</button>
+            <button class="suggestion-btn" onclick="hideSuggestion()">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Command Input -->
+    <input type="text" class="command-input" id="commandInput" placeholder="Ask Orb anything...">
+
+    <!-- Chat Messages Display -->
+    <div class="chat-messages-display" id="chatMessagesDisplay">
+        <div class="chat-messages-header">
+            <h3 id="chatTitle">New Conversation</h3>
+            <button class="close-chat-btn" id="closeChatBtn">×</button>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="input-container">
+            <div class="collection-selector-container">
+                <select class="collection-selector" id="collectionSelector">
+                    <option value="">No collection selected</option>
+                </select>
+                <span class="collection-status" id="collectionStatus">Select a collection to search your documents</span>
+            </div>
+            <div class="chat-input-container" id="chatInputContainer">
+                <input type="text" class="chat-input" id="messageInput" placeholder="Ask me anything or drag an image here...">
+                <button class="send-btn" id="sendBtn" title="Send message" onclick="sendMessage()">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.md,.jpg,.jpeg,.png,.bmp,.tiff,.gif,.mp4,.avi,.mov,.mkv,.wmv,.flv,.csv,.xlsx,.xls,.db,.sqlite" multiple>
+    
+    <!-- Directory import modal -->
+    <div class="modal" id="directoryModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Import Directory</h3>
+                <span class="close-btn" onclick="closeDirectoryModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="directoryPath">Directory Path:</label>
+                    <input type="text" id="directoryPath" placeholder="/path/to/your/directory" class="form-input">
+                    <div class="form-help">Enter the full path to the directory you want to import</div>
+                </div>
+                
+                <div class="supported-formats">
+                    <h4>Supported File Types:</h4>
+                    <div class="format-categories">
+                        <div class="format-category">
+                            <strong>Text:</strong> .txt, .md, .pdf, .doc, .docx
+                        </div>
+                        <div class="format-category">
+                            <strong>Images:</strong> .jpg, .jpeg, .png, .bmp, .tiff, .gif
+                        </div>
+                        <div class="format-category">
+                            <strong>Videos:</strong> .mp4, .avi, .mov, .mkv, .wmv, .flv
+                        </div>
+                        <div class="format-category">
+                            <strong>Data:</strong> .csv, .xlsx, .xls, .db, .sqlite
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="processing-info">
+                    <h4>What happens during import:</h4>
+                    <ul>
+                        <li>Text files are chunked and summarized</li>
+                        <li>Images are analyzed with AI vision models</li>
+                        <li>Videos have keyframes extracted and analyzed</li>
+                        <li>All content is categorized and made searchable</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDirectoryModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="startDirectoryImport()">Start Import</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Import progress modal -->
+    <div class="modal" id="importProgressModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Importing Directory...</h3>
+            </div>
+            <div class="modal-body">
+                <div class="progress-info">
+                    <div class="progress-status" id="importStatus">Processing files...</div>
+                    <div class="progress-details" id="importDetails"></div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

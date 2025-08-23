@@ -1,0 +1,122 @@
+
+Design an AI knowledge agent application called "Orb".
+This is a web app in Flask and python. The app implements an LLM chat system coupled with the ability to insert your documents or data in the chat prompts.
+
+The app back-end uses an AI agent that implements a two steps process: first it allows the user prompt to go to the LLM and get a response. The agent then asks the LLM to double check the answer and verify it is correctness. Only after verification it will show the answer to the user.
+
+Users:
+Use can login with email and password. User registration includes adding personal information that can be added and edited at anytime. 
+User information is: [name, lastname, email, phone, address, API keys]
+User information is stored in the database.
+
+My data and collections:
+The user can also upload documents into collections of documents. Each collection will create a separate directory.
+The user can select a collection of document to add to a prompt. When the user selects a collection of documents, the app retrieves the most appropriate document(s) and add them to the prompt. If the documents are too large, it only inserts the portions of the documents that are relevant.
+All collections and documents are saved to the database. Links to files are preserved in the database.
+Users can click on a collection and see a list of documents and also be able to add or delete documents in the collection.
+
+My conversations:
+The app organizes chats into conversations which can be saved, deleted and retrieved at a later time. User can select which conversation to join or start a new one.
+All chat inputs and outputs are saved to the database.
+
+App visuals:
+A black screen with a dialogue box where user can input a text prompt. On the right side there is a separate column "my data" with a list of collections of documents and the upload button "add my data". Users use this upload button a widget to upload documents into an existing collection or create a new one. 
+Users can select a collection, and if they do that collection is used together with their textual prompt.
+
+
+Implementation:
+Use Anthropic Claude for LLM. Use a smaller LLM as verification agent to save cost. 
+Use a database to store documents, collection and embedding of documents.
+As a debug option print all data to and from LLM on terminal. 
+While waiting for final response report to the user what the app is doing, where is in the processing steps (sending your prompt, getting initial answer, verifying answer, getting final response).
+Refactor code so that style CSS code is placed in the static/css/ directory and all javascript code in the static/js/ directory, separate from the templates/ directory where html are stored.
+implement a way to test all the functionality without the GIU, so we can test easily, maintain the same database as in the GUI  
+
+System implementation diagram:
+
+Adapt this application to be able to take an entire directories of documents and files. The UI will also users to import directories as a collection.
+vector_store.py file needs to be changed and augmented with this functionality.
+File can be text, images, videos, databases, tables, diagrams. Implement a back-end document processors that can ingest the directory, and do:
+- text: chunk the text into smaller segments that can be retrieved semantically with a sentence encoder
+- text: also summarize the first 1000 words of the text into a summary that can be used for document categorization
+- images: use CLIP or similar to turn images into text and then process them as text
+- videos: extract key frames from video, and do the same as above for images
+
+Label each data segment with one or multiple categories. To begin the type of data it come from: text, image, video, etc.
+Other labels can be: [work, personal, general info, contacts info, conversations, meetings, notes]
+
+Add all the data vectors to the vector database. All files in the database are linked to the physical files so it can be retrieved by user search. 
+
+
+
+
+---------------------------------------------------------------
+TO BE IMPLEMENTED
+
+
+Initial splash template view:
+- splash.html present the slash image in images/orb_splash3.png for 3 seconds, with login bar on the left side. 
+
+Main template view with current conversation:
+- base.html: the conversation screen with at the bottom a dialogue box where user can input a text prompt.
+- Top: chat title (can be edited and saved)
+- Top right: navigation bar with the following icons: account, my data, my conversations. User can use this menu to navigate between the template views: [Account, My Data, My Conversations].
+
+'Account' template view:
+- show all user information: name, last name, address, telephone, login, password (hidden). User can edit any of the data and save it.
+
+'My Data' template view:
+- display all Collections and documents for each collection. User can edit each collection and add or remove documents.
+
+'My Conversations' template view:
+- display all conversations. User can view and delete each conversation.
+
+
+
+No-UI option:
+Implement a python app to run and test the entire system capabilities without UI and Flask. 
+This is a terminal only app called app_terminal.py.
+App allows to do all the same upload files into collections, and chat, and settings. 
+All is done via text using command line. We can also list collections, files, chats.
+We can also create new collections in the command line.
+We can have a new chat in the command line.
+We can delete chats and collections. We can add files to collections.
+It can also list links to a file if requested. For example: "show me all my pictures of cat"
+
+
+Color scheme:
+🌞 Light Theme Palette (chat app)
+Background → #D6EEEB (very soft aqua)
+Primary text → #102444 (deep navy for readability)
+Accent / buttons → #00B6D3 (bright cyan-blue)
+Secondary highlight → #C679B4 (muted pink for subtle accents)
+
+🌙 Dark Theme Palette (chat app)
+Background → #102444 (navy / deep night)
+Primary text → #D6EEEB (soft aqua for good contrast)
+Accent / buttons → #00BCAD (teal pop)
+Secondary highlight → #7D4497 (deep purple for personality)
+
+
+Use only colors from this list:
+#D6EEEB
+#C7E4D9
+#86D0C6
+#74CDD1
+#00BCAD
+#1294A7
+#11666B
+#C1E9FC
+#95DAEE
+#6ACDE5
+#00B6D3
+#0085BD
+#2A348E
+#102444
+#C0BBDE
+#9990BA
+#D498C6
+#C679B4
+#7D4497
+#671D67
+#401E5B
