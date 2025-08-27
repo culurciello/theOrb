@@ -70,9 +70,49 @@ Processing data pipelines:
      - like multimodal text + videos
 
 
+### Agent Apps
+
+Orvin Orb offers the ability to load different AI agents to process data.
+
+Specifications:
+- user can specify which AI agent to use in the chat.
+- Each AI Agent has separate system prompts and directives.
+- 'ai_agents/' directory stores all agents.
+- 'verification agent' is the default agent.
+
+Agents:
+
+1. AI agent: 'verification agent'
+    - Flow: user prompt --> main LLM response --> verification AI agent --> final response
+    - Prompt: verify that the information reported by the main LLM is correct, given the user data and collection provided.
+    [Note: this is the agent currently implemented in Orb]
+
+2. AI agent: 'Deep research agent'
+    - Flow: user prompt with 'deep research' --> search user data, web for 5-10 articles on the topic --> combine and send to main LLM --> response
+    - Prompt: perform deep research on the topic, search the user data, web, news for related articles
+
+
 
 ## OS X app
 
 Package app into an OS X app:
 
-`python package_macos_app.py`
+`python scripts/package_macos_app.py`
+
+then
+
+`./theOrb.app/install_dependencies.sh`
+
+To run the app:
+
+1. Open terminal
+
+2. Then type:
+
+`cd ~/Desktop/theOrb.app/Contents/MacOS/`
+
+`./theOrb` 
+
+If no errors, the application will be available as web page:
+
+3. Open Safari to: http://localhost:3000

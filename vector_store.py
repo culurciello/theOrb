@@ -11,9 +11,17 @@ class VectorStore:
     def __init__(self, persist_directory: str = "./chroma_db"):
         """Initialize ChromaDB vector store with sentence transformers."""
         self.client = chromadb.PersistentClient(path=persist_directory)
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        self._model = None  # Lazy load the model
         # Store CLIP embeddings separately for image similarity search
         self.image_embeddings = {}  # {collection_name: {file_path: embedding}}
+    
+    @property
+    def model(self):
+        """Lazy load the sentence transformer model."""
+        if self._model is None:
+            print("Loading SentenceTransformer model...")
+            self._model = SentenceTransformer('all-MiniLM-L6-v2')
+        return self._model
         
     def get_or_create_collection(self, collection_name: str):
         """Get or create a ChromaDB collection for a document collection."""

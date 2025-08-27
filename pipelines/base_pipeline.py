@@ -11,7 +11,15 @@ class BasePipeline(ABC):
     ]
     
     def __init__(self):
-        self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self._sentence_model = None
+    
+    @property
+    def sentence_model(self):
+        """Lazy load the sentence transformer model."""
+        if self._sentence_model is None:
+            print("Loading SentenceTransformer for pipeline...")
+            self._sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+        return self._sentence_model
     
     @abstractmethod
     def process(self, file_path: str) -> Dict[str, Any]:

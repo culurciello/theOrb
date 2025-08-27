@@ -50,6 +50,8 @@ def create_info_plist(contents_dir):
     <string>APPL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.png</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
     <key>NSHighResolutionCapable</key>
@@ -121,6 +123,7 @@ def copy_app_files(resources_dir):
         "requirements.txt",
         "routes.py",
         "vector_store.py",
+        "pipelines",
         "static",
         "templates",
         "instance",

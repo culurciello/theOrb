@@ -71,11 +71,19 @@
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="input-container">
-            <div class="collection-selector-container">
-                <select class="collection-selector" id="collectionSelector">
-                    <option value="">No collection selected</option>
-                </select>
-                <span class="collection-status" id="collectionStatus">Select a collection to search your documents</span>
+            <div class="selectors-container">
+                <div class="collection-selector-container">
+                    <select class="collection-selector" id="collectionSelector">
+                        <option value="">No collection selected</option>
+                    </select>
+                    <span class="collection-status" id="collectionStatus">Select a collection to search your documents</span>
+                </div>
+                <div class="agent-selector-container">
+                    <select class="agent-selector" id="agentSelector">
+                        <option value="">Loading agents...</option>
+                    </select>
+                    <span class="agent-status" id="agentStatus">Choose an AI agent for processing</span>
+                </div>
             </div>
             <div class="chat-input-container" id="chatInputContainer">
                 <input type="text" class="chat-input" id="messageInput" placeholder="Ask me anything or drag an image here...">

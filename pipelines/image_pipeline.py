@@ -16,7 +16,24 @@ class ImagePipeline(BasePipeline):
     def __init__(self):
         super().__init__()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
+        self._clip_model = None
+        self._clip_preprocess = None
+    
+    @property
+    def clip_model(self):
+        """Lazy load the CLIP model."""
+        if self._clip_model is None:
+            print("Loading CLIP model for ImagePipeline...")
+            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+        return self._clip_model
+    
+    @property  
+    def clip_preprocess(self):
+        """Lazy load the CLIP preprocessor."""
+        if self._clip_preprocess is None:
+            print("Loading CLIP model for ImagePipeline...")
+            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+        return self._clip_preprocess
     
     def process(self, file_path: str) -> Dict[str, Any]:
         """Process image file according to the pipeline specification."""

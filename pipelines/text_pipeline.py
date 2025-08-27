@@ -17,7 +17,15 @@ class TextPipeline(BasePipeline):
     
     def __init__(self):
         super().__init__()
-        self.summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        self._summarizer = None
+    
+    @property
+    def summarizer(self):
+        """Lazy load the summarizer model."""
+        if self._summarizer is None:
+            print("Loading BART summarizer for TextPipeline...")
+            self._summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        return self._summarizer
     
     def process(self, file_path: str) -> Dict[str, Any]:
         """Process text file according to the pipeline specification."""

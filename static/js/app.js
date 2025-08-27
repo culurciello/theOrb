@@ -4,8 +4,10 @@ let activePanel = null;
 let isRecording = false;
 let currentConversationId = null;
 let selectedCollectionId = null;
+let selectedAgentId = null;
 let collections = [];
 let conversations = [];
+let availableAgents = [];
 let currentDocuments = [];
 let isInDocumentView = false;
 let collectionsView = 'list'; // 'list', 'detail', 'create'
@@ -31,6 +33,8 @@ const chatTitle = document.getElementById('chatTitle');
 const closeChatBtn = document.getElementById('closeChatBtn');
 const collectionSelector = document.getElementById('collectionSelector');
 const collectionStatus = document.getElementById('collectionStatus');
+const agentSelector = document.getElementById('agentSelector');
+const agentStatus = document.getElementById('agentStatus');
 const fileInput = document.getElementById('fileInput');
 const chatInputContainer = document.getElementById('chatInputContainer');
 
@@ -40,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadConversations();
     loadUserProfile();
     loadApiKeys();
+    loadAvailableAgents();
     initializeTheme();
     setupEventListeners();
     showWelcomeMessage();
@@ -115,6 +120,19 @@ function setupEventListeners() {
         } else {
             selectedCollectionId = null;
             collectionStatus.textContent = 'Select a collection to search your documents';
+        }
+    });
+
+    // Agent selector change handler
+    agentSelector.addEventListener('change', function() {
+        const agentId = this.value;
+        if (agentId) {
+            selectedAgentId = agentId;
+            const agent = availableAgents.find(a => a.name === agentId);
+            agentStatus.textContent = `Using ${agent?.display_name || agentId} agent`;
+        } else {
+            selectedAgentId = null;
+            agentStatus.textContent = 'Choose an AI agent for processing';
         }
     });
 
@@ -331,6 +349,18 @@ function getCollectionDetailContent() {
     }
 
     content += `
+            </div>
+            
+            <div class="collection-file-links-section" style="margin-top: 20px;">
+                <div class="section-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                    <h5 style="margin: 0; font-size: 14px; opacity: 0.8;">📎 File Links</h5>
+                    <button class="btn-small btn-secondary" onclick="loadCollectionFileLinks(${collection.id})" title="Refresh links">🔄</button>
+                </div>
+                <div class="file-links-container" id="fileLinksContainer-${collection.id}">
+                    <div style="text-align: center; padding: 15px; opacity: 0.6; font-size: 12px;">
+                        Click refresh to load file links
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -688,6 +718,22 @@ async function loadConversations() {
     }
 }
 
+async function loadAvailableAgents() {
+    try {
+        const response = await fetch('/api/agents');
+        availableAgents = await response.json();
+        updateAgentSelector();
+    } catch (error) {
+        console.error('Error loading agents:', error);
+        // Set default agents if API fails
+        availableAgents = [
+            { name: 'verification', display_name: 'Verification Agent', description: 'Verifies information accuracy', is_default: true },
+            { name: 'deep_research', display_name: 'Deep Research Agent', description: 'Performs comprehensive research', is_default: false }
+        ];
+        updateAgentSelector();
+    }
+}
+
 function selectCollection(collectionId) {
     selectedCollectionId = collectionId;
     
@@ -713,6 +759,89 @@ async function loadCollectionDocuments(collectionId) {
     } catch (error) {
         console.error('Error loading documents:', error);
     }
+}
+
+async function loadCollectionFileLinks(collectionId) {
+    try {
+        const container = document.getElementById(`fileLinksContainer-${collectionId}`);
+        if (!container) return;
+        
+        // Show loading state
+        container.innerHTML = `
+            <div style="text-align: center; padding: 15px; opacity: 0.6; font-size: 12px;">
+                Loading file links...
+            </div>
+        `;
+        
+        const response = await fetch(`/api/collections/${collectionId}/file-links`);
+        const data = await response.json();
+        
+        if (data.file_links && data.file_links.length > 0) {
+            let linksHTML = `
+                <div class="file-links-header" style="font-size: 12px; opacity: 0.7; margin-bottom: 8px;">
+                    ${data.total_files} file${data.total_files !== 1 ? 's' : ''} available
+                </div>
+            `;
+            
+            data.file_links.forEach(file => {
+                const fileIcon = getFileIcon(file.file_type);
+                const fileSize = formatFileSize(file.file_size || 0);
+                
+                linksHTML += `
+                    <div class="file-link-item" style="display: flex; align-items: center; padding: 8px; margin-bottom: 4px; background: rgba(255,255,255,0.05); border-radius: 4px; transition: background 0.2s;">
+                        <div class="file-icon" style="margin-right: 8px; font-size: 16px;">${fileIcon}</div>
+                        <div class="file-info" style="flex: 1; min-width: 0;">
+                            <div class="file-name" style="font-size: 12px; font-weight: 500; margin-bottom: 2px; word-break: break-all;">
+                                <a href="${file.url}" target="_blank" style="color: var(--primary-color); text-decoration: none;">${file.filename}</a>
+                            </div>
+                            <div class="file-meta" style="font-size: 10px; opacity: 0.6;">
+                                ${file.file_type.toUpperCase()} • ${fileSize}
+                                ${file.categories && file.categories.length > 0 ? ' • ' + file.categories.slice(0, 2).join(', ') : ''}
+                            </div>
+                        </div>
+                        <div class="file-actions" style="margin-left: 8px;">
+                            <a href="${file.url}" target="_blank" class="btn-tiny" title="Open file" style="padding: 4px 6px; font-size: 10px; text-decoration: none;">🔗</a>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = linksHTML;
+        } else {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 15px; opacity: 0.6; font-size: 12px;">
+                    No accessible files found
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading file links:', error);
+        const container = document.getElementById(`fileLinksContainer-${collectionId}`);
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 15px; opacity: 0.6; font-size: 12px; color: #ff6b6b;">
+                    Error loading file links
+                </div>
+            `;
+        }
+    }
+}
+
+function getFileIcon(fileType) {
+    const icons = {
+        'image': '🖼️',
+        'video': '🎥',
+        'text': '📄',
+        'audio': '🔊',
+        'pdf': '📕',
+        'doc': '📘',
+        'docx': '📘',
+        'xls': '📊',
+        'xlsx': '📊',
+        'ppt': '📺',
+        'pptx': '📺'
+    };
+    return icons[fileType.toLowerCase()] || '📄';
 }
 
 function backToCollections() {
@@ -812,7 +941,8 @@ async function sendMessage() {
             body: JSON.stringify({
                 message: message,
                 conversation_id: currentConversationId,
-                collection_id: selectedCollectionId
+                collection_id: selectedCollectionId,
+                agent_id: selectedAgentId
             })
         });
         
@@ -1469,6 +1599,11 @@ function viewCollectionDetails(collectionId) {
     collectionsView = 'detail';
     loadCollectionDocuments(collectionId);
     showPanel('collections');
+    
+    // Auto-load file links after a brief delay to let the panel render
+    setTimeout(() => {
+        loadCollectionFileLinks(collectionId);
+    }, 100);
 }
 
 function selectCollectionForChat(collectionId) {
@@ -1785,6 +1920,41 @@ function updateCollectionSelector() {
         const collection = collections.find(c => c.id == selectedCollectionId);
         if (collection) {
             collectionStatus.textContent = `Using "${collection.name}" collection`;
+        }
+    }
+}
+
+function updateAgentSelector() {
+    if (!agentSelector) return;
+    
+    // Clear existing options
+    agentSelector.innerHTML = '<option value="">Auto-detect agent</option>';
+    
+    // Add agents as options
+    availableAgents.forEach(agent => {
+        const option = document.createElement('option');
+        option.value = agent.name;
+        option.textContent = `${agent.display_name}${agent.is_default ? ' (Default)' : ''}`;
+        option.title = agent.description;
+        agentSelector.appendChild(option);
+    });
+    
+    // Set default agent if available and none selected
+    if (!selectedAgentId) {
+        const defaultAgent = availableAgents.find(a => a.is_default);
+        if (defaultAgent) {
+            selectedAgentId = defaultAgent.name;
+            agentSelector.value = defaultAgent.name;
+            agentStatus.textContent = `Using ${defaultAgent.display_name} agent`;
+        } else {
+            agentStatus.textContent = 'Agent will be auto-detected from your message';
+        }
+    } else {
+        // Restore selected agent
+        agentSelector.value = selectedAgentId;
+        const agent = availableAgents.find(a => a.name === selectedAgentId);
+        if (agent) {
+            agentStatus.textContent = `Using ${agent.display_name} agent`;
         }
     }
 }

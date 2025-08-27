@@ -17,14 +17,15 @@ from pipelines.document_processor import DocumentProcessor as PipelineProcessor
 class DocumentProcessor:
     def __init__(self):
         """Initialize the document processor using the new pipeline system."""
-        # Initialize the pipeline processor
-        self.pipeline_processor = PipelineProcessor()
+        # Initialize the pipeline processor with lazy loading
+        self._pipeline_processor = None
         
-        # Keep backward compatibility - initialize models for legacy methods
+        # Keep backward compatibility - lazy load models for legacy methods
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.clip_model, self.clip_preprocess = clip.load("ViT-B/32", device=self.device)
-        self.summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-        self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+        self._clip_model = None
+        self._clip_preprocess = None
+        self._summarizer = None
+        self._sentence_model = None
         
         self.content_categories = [
             "work", "personal", "general info", "contacts info", 
@@ -38,6 +39,46 @@ class DocumentProcessor:
             'database': ['.db', '.sqlite', '.sqlite3'],
             'table': ['.csv', '.xlsx', '.xls']
         }
+
+    @property
+    def pipeline_processor(self):
+        """Lazy load the pipeline processor."""
+        if self._pipeline_processor is None:
+            print("Loading pipeline processor...")
+            self._pipeline_processor = PipelineProcessor()
+        return self._pipeline_processor
+
+    @property
+    def clip_model(self):
+        """Lazy load the CLIP model."""
+        if self._clip_model is None:
+            print("Loading CLIP model...")
+            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+        return self._clip_model
+    
+    @property
+    def clip_preprocess(self):
+        """Lazy load the CLIP preprocessor."""
+        if self._clip_preprocess is None:
+            print("Loading CLIP model...")
+            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+        return self._clip_preprocess
+
+    @property
+    def summarizer(self):
+        """Lazy load the summarizer model."""
+        if self._summarizer is None:
+            print("Loading BART summarizer...")
+            self._summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        return self._summarizer
+
+    @property
+    def sentence_model(self):
+        """Lazy load the sentence transformer model."""
+        if self._sentence_model is None:
+            print("Loading sentence transformer...")
+            self._sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+        return self._sentence_model
 
     def process_directory(self, directory_path: str) -> List[Dict[str, Any]]:
         """Process an entire directory using the new pipeline system."""
@@ -78,12 +119,14 @@ class DocumentProcessor:
     
     def _format_text_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format text pipeline output for backward compatibility."""
+        # The pipeline returns 'chunks' not 'text_chunks'
+        chunks = result.get('chunks', [])
         return {
             'file_path': result['link_to_original_file'],
             'file_type': 'text',
-            'content': ' '.join(result.get('text_chunks', [])),
+            'content': ' '.join(chunks) if chunks else result.get('summary', ''),
             'summary': result['summary'],
-            'chunks': result.get('text_chunks', []),
+            'chunks': chunks,
             'categories': result['category'],
             'embedding_list': result['embedding_list'],
             'metadata': result.get('metadata', {}),
@@ -122,12 +165,13 @@ class DocumentProcessor:
     
     def _format_multimodal_text_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format multimodal text pipeline output for backward compatibility."""
+        chunks = result.get('chunks', [])
         return {
             'file_path': result['link_to_original_file'],
             'file_type': 'multimodal_text',
             'content': result.get('content', ''),
             'summary': result['summary'],
-            'chunks': result.get('text_chunks', []),
+            'chunks': chunks,
             'categories': result['category'],
             'embedding_list': result['embedding_list'],
             'image_list': result.get('image_list', []),
@@ -157,12 +201,13 @@ class DocumentProcessor:
     
     def _format_webpage_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Format webpage pipeline output for backward compatibility."""
+        chunks = result.get('chunks', [])
         return {
             'file_path': result['link_to_original_file'],
             'file_type': 'multimodal_webpage',
             'content': result.get('content', ''),
             'summary': result['summary'],
-            'chunks': result.get('text_chunks', []),
+            'chunks': chunks,
             'categories': result['category'],
             'embedding_list': result['embedding_list'],
             'image_list': result.get('image_list', []),

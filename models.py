@@ -103,6 +103,7 @@ class Message(db.Model):
     role = db.Column(db.String(20), nullable=False)  # 'user', 'assistant'
     content = db.Column(db.Text, nullable=False)
     collection_used = db.Column(db.String(100))
+    agent_used = db.Column(db.String(100))  # Which AI agent was used
     verified = db.Column(db.Boolean, default=False)
     images = db.Column(db.Text)  # JSON string of images data
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

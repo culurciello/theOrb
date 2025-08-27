@@ -14,17 +14,28 @@ from database import db
 from models import Collection, Document, DocumentChunk, Conversation, Message, UserProfile, ApiKey
 from document_processor import DocumentProcessor
 from vector_store import VectorStore
-from ai_agent import OrbAIAgent
+from ai_agents import AgentManager
+from ai_agents.verification_agent import VerificationAgent
 
 # Initialize services
 vector_store = VectorStore()
 document_processor = DocumentProcessor()
-ai_agent = OrbAIAgent()
+verification_agent = VerificationAgent()
+agent_manager = AgentManager()
 
 @bp.route('/')
 def index():
     """Serve the main application page."""
     return render_template('index.html')
+
+@bp.route('/api/agents', methods=['GET'])
+def get_available_agents():
+    """Get all available AI agents."""
+    try:
+        agents = agent_manager.get_available_agents()
+        return jsonify(agents)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections', methods=['GET'])
 def get_collections():
@@ -307,6 +318,7 @@ def chat():
         user_message = request.form.get('message', '').strip()
         conversation_id = request.form.get('conversation_id')
         collection_id = request.form.get('collection_id')
+        agent_id = request.form.get('agent_id')
         uploaded_image = request.files.get('image')
         image_action = request.form.get('image_action', 'similarity')
     else:
@@ -314,6 +326,7 @@ def chat():
         user_message = data.get('message', '').strip()
         conversation_id = data.get('conversation_id')
         collection_id = data.get('collection_id')
+        agent_id = data.get('agent_id')
         uploaded_image = None
         image_action = None
 
@@ -361,7 +374,7 @@ def chat():
                 if image_action == 'similarity':
                     # Find similar images in collection using CLIP
                     if collection_name:
-                        similar_images = ai_agent.search_similar_images_by_upload(
+                        similar_images = verification_agent.search_similar_images_by_upload(
                             collection_name, image_path, n_results=10
                         )
                         if similar_images:
@@ -399,11 +412,29 @@ def chat():
                 shutil.rmtree(temp_dir)
 
         else:
-            # Normal chat message
-            response_data = ai_agent.generate_response(
+            # Normal chat message - use agent manager
+            # Get context from collection if specified
+            context = ""
+            if collection_name:
+                relevant_chunks = vector_store.search_similar_chunks(
+                    collection_name, user_message, n_results=3
+                )
+                if relevant_chunks:
+                    context = "\n\n--- Relevant Information ---\n"
+                    for i, chunk in enumerate(relevant_chunks):
+                        context += f"Document {i+1}:\n{chunk['content']}\n\n"
+
+            # Auto-detect agent if not specified
+            if not agent_id:
+                agent_id = agent_manager.detect_agent_from_message(user_message)
+            
+            # Process with agent manager
+            response_data = agent_manager.process_request(
                 user_message=user_message,
-                collection_name=collection_name,
-                conversation_history=conversation_history
+                agent_name=agent_id,
+                context=context,
+                conversation_history=conversation_history,
+                collection_name=collection_name
             )
             response_text = response_data['response']
             verified = response_data.get('verified')
@@ -424,6 +455,7 @@ def chat():
             role='assistant',
             content=response_text,
             collection_used=collection_name,
+            agent_used=response_data.get('agent_used', agent_id),
             verified=verified
         )
         
@@ -477,6 +509,46 @@ def get_collection_files(collection_id):
         'collection_name': collection.name,
         'files': files,
         'file_count': len(files)
+    })
+
+@bp.route('/api/collections/<int:collection_id>/file-links', methods=['GET'])
+def get_collection_file_links(collection_id):
+    """Get all file links in a collection for easy access."""
+    collection = Collection.query.get_or_404(collection_id)
+    documents = Document.query.filter_by(collection_id=collection_id).all()
+    
+    file_links = []
+    for doc in documents:
+        # Determine the best URL for accessing the file
+        file_url = None
+        if doc.original_file_url:
+            file_url = doc.original_file_url
+        elif doc.stored_file_path:
+            # Create URL path for stored files
+            if 'uploads/' in doc.stored_file_path:
+                relative_path = doc.stored_file_path.split('uploads/', 1)[1]
+                file_url = f'/api/files/{relative_path}'
+            else:
+                file_url = f'/api/files/collection_{collection_id}/{doc.filename}'
+        
+        if file_url:
+            file_links.append({
+                'id': doc.id,
+                'filename': doc.filename,
+                'file_type': doc.file_type,
+                'file_size': doc.file_size,
+                'mime_type': doc.mime_type,
+                'url': file_url,
+                'created_at': doc.created_at.isoformat(),
+                'categories': doc.get_categories(),
+                'summary': doc.summary[:100] + '...' if doc.summary and len(doc.summary) > 100 else doc.summary
+            })
+    
+    return jsonify({
+        'collection_id': collection_id,
+        'collection_name': collection.name,
+        'file_links': file_links,
+        'total_files': len(file_links)
     })
 
 @bp.route('/api/collections/<int:collection_id>/files/<int:document_id>', methods=['DELETE'])
@@ -888,7 +960,7 @@ def search_similar_images(collection_id):
         file.save(temp_path)
         
         n_results = request.form.get('n_results', 10, type=int)
-        similar_images = ai_agent.search_similar_images_by_upload(
+        similar_images = verification_agent.search_similar_images_by_upload(
             collection.name, temp_path, n_results=n_results
         )
         
@@ -989,7 +1061,7 @@ def image_caption():
         
         try:
             # Use CLIP to generate caption
-            caption = ai_agent.generate_image_caption(temp_path)
+            caption = verification_agent.generate_image_caption(temp_path)
             
             return jsonify({'caption': caption})
             
