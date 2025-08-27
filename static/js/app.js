@@ -5,9 +5,11 @@ let isRecording = false;
 let currentConversationId = null;
 let selectedCollectionId = null;
 let selectedAgentId = null;
+let selectedLLMId = null;
 let collections = [];
 let conversations = [];
 let availableAgents = [];
+let availableLLMs = {};
 let currentDocuments = [];
 let isInDocumentView = false;
 let collectionsView = 'list'; // 'list', 'detail', 'create'
@@ -35,6 +37,8 @@ const collectionSelector = document.getElementById('collectionSelector');
 const collectionStatus = document.getElementById('collectionStatus');
 const agentSelector = document.getElementById('agentSelector');
 const agentStatus = document.getElementById('agentStatus');
+const llmSelector = document.getElementById('llmSelector');
+const llmStatus = document.getElementById('llmStatus');
 const fileInput = document.getElementById('fileInput');
 const chatInputContainer = document.getElementById('chatInputContainer');
 
@@ -45,6 +49,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadUserProfile();
     loadApiKeys();
     loadAvailableAgents();
+    loadAvailableLLMs();
     initializeTheme();
     setupEventListeners();
     showWelcomeMessage();
@@ -133,6 +138,14 @@ function setupEventListeners() {
         } else {
             selectedAgentId = null;
             agentStatus.textContent = 'Choose an AI agent for processing';
+        }
+    });
+
+    // LLM selector change handler
+    llmSelector.addEventListener('change', function() {
+        const llmId = this.value;
+        if (llmId && llmId !== selectedLLMId) {
+            switchLLM(llmId);
         }
     });
 
@@ -734,6 +747,150 @@ async function loadAvailableAgents() {
     }
 }
 
+async function loadAvailableLLMs() {
+    try {
+        const response = await fetch('/api/llm/configs');
+        availableLLMs = await response.json();
+        updateLLMSelector();
+        loadCurrentLLM();
+    } catch (error) {
+        console.error('Error loading LLMs:', error);
+        llmSelector.innerHTML = '<option value="">Error loading LLMs</option>';
+        llmStatus.textContent = 'Error loading language models';
+    }
+}
+
+async function loadCurrentLLM() {
+    try {
+        const response = await fetch('/api/llm/current');
+        const currentLLM = await response.json();
+        if (currentLLM.provider) {
+            updateLLMStatus(currentLLM);
+        }
+    } catch (error) {
+        console.error('Error loading current LLM:', error);
+    }
+}
+
+function updateLLMSelector() {
+    llmSelector.innerHTML = '';
+    
+    if (Object.keys(availableLLMs).length === 0) {
+        llmSelector.innerHTML = '<option value="">No LLMs configured</option>';
+        return;
+    }
+    
+    // Group by provider
+    const providers = { anthropic: [], ollama: [], vllm: [] };
+    
+    Object.entries(availableLLMs).forEach(([id, config]) => {
+        if (config.is_active) {
+            providers[config.provider].push({ id, ...config });
+        }
+    });
+    
+    // Add options grouped by provider
+    Object.entries(providers).forEach(([provider, configs]) => {
+        if (configs.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = provider.toUpperCase();
+            
+            configs.forEach(config => {
+                const option = document.createElement('option');
+                option.value = config.id;
+                option.textContent = `${config.display_name} (${config.size})`;
+                option.selected = config.is_current;
+                
+                if (config.is_current) {
+                    selectedLLMId = config.id;
+                }
+                
+                // Add status indicator
+                if (!config.has_api_key && config.provider === 'anthropic') {
+                    option.textContent += ' - No API Key';
+                    option.disabled = true;
+                }
+                
+                group.appendChild(option);
+            });
+            
+            llmSelector.appendChild(group);
+        }
+    });
+    
+    if (llmSelector.children.length === 0) {
+        llmSelector.innerHTML = '<option value="">No active LLMs</option>';
+    }
+}
+
+function updateLLMStatus(llmInfo) {
+    if (!llmInfo || !llmInfo.provider) {
+        llmStatus.textContent = 'No LLM selected';
+        llmStatus.className = 'llm-status error';
+        return;
+    }
+    
+    const statusText = `${llmInfo.display_name} - ${llmInfo.is_available ? 'Available' : 'Unavailable'}`;
+    llmStatus.textContent = statusText;
+    llmStatus.className = `llm-status ${llmInfo.is_available ? 'success' : 'error'}`;
+}
+
+async function switchLLM(configId) {
+    try {
+        const response = await fetch('/api/llm/current', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config_id: configId })
+        });
+        
+        if (response.ok) {
+            selectedLLMId = configId;
+            loadCurrentLLM(); // Refresh status
+            showNotification('LLM switched successfully', 'success');
+        } else {
+            const error = await response.json();
+            showNotification(error.error || 'Failed to switch LLM', 'error');
+        }
+    } catch (error) {
+        console.error('Error switching LLM:', error);
+        showNotification('Error switching LLM', 'error');
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // Simple notification using browser alert for now
+    // In production, you might want to implement a proper notification system
+    console.log(`${type.toUpperCase()}: ${message}`);
+    
+    // Create a temporary notification element
+    const notification = document.createElement('div');
+    notification.textContent = message;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        z-index: 10000;
+        transition: opacity 0.3s ease;
+        background: ${type === 'success' ? 'var(--success-color)' : type === 'error' ? 'var(--error-color)' : 'var(--accent-color)'};
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
+
 function selectCollection(collectionId) {
     selectedCollectionId = collectionId;
     
@@ -1275,6 +1432,7 @@ function getSettingsContent() {
             <div class="settings-tabs">
                 <button class="settings-tab ${activeSettingsTab === 'profile' ? 'active' : ''}" data-tab="profile">Profile</button>
                 <button class="settings-tab ${activeSettingsTab === 'api-keys' ? 'active' : ''}" data-tab="api-keys">API Keys</button>
+                <button class="settings-tab ${activeSettingsTab === 'llm' ? 'active' : ''}" data-tab="llm">LLM Models</button>
                 <button class="settings-tab ${activeSettingsTab === 'appearance' ? 'active' : ''}" data-tab="appearance">Appearance</button>
             </div>
             
@@ -1284,6 +1442,10 @@ function getSettingsContent() {
             
             <div class="settings-tab-content ${activeSettingsTab === 'api-keys' ? 'active' : ''}" id="api-keys-tab">
                 ${getApiKeysTabContent()}
+            </div>
+            
+            <div class="settings-tab-content ${activeSettingsTab === 'llm' ? 'active' : ''}" id="llm-tab">
+                ${getLLMTabContent()}
             </div>
             
             <div class="settings-tab-content ${activeSettingsTab === 'appearance' ? 'active' : ''}" id="appearance-tab">
@@ -1443,6 +1605,57 @@ function getAppearanceTabContent() {
     `;
 }
 
+function getLLMTabContent() {
+    return `
+        <div class="llm-settings">
+            <div class="setting-group">
+                <label class="setting-label">Current Language Model</label>
+                <div class="current-llm-info" id="currentLLMInfo">
+                    <div class="loading">Loading...</div>
+                </div>
+                <div class="setting-description">
+                    This is the currently active language model used for AI responses.
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label class="setting-label">Default Model Selection</label>
+                <select class="form-input" id="defaultLLMSelector">
+                    <option value="">Loading models...</option>
+                </select>
+                <div class="setting-description">
+                    Choose your preferred default language model. This will be used for all new conversations.
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label class="setting-label">Available Models</label>
+                <div class="llm-models-list" id="llmModelsList">
+                    <div class="loading">Loading available models...</div>
+                </div>
+                <div class="setting-description">
+                    All available language models and their status. Green indicates the model is available and ready to use.
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label class="setting-label">Provider Configuration</label>
+                <div class="provider-configs" id="providerConfigs">
+                    <div class="loading">Loading provider configurations...</div>
+                </div>
+                <div class="setting-description">
+                    Configure API keys and settings for different LLM providers.
+                </div>
+            </div>
+            
+            <div class="setting-actions">
+                <button class="btn-primary" onclick="refreshLLMSettings()">🔄 Refresh Models</button>
+                <button class="btn-secondary" onclick="testCurrentLLM()">🧪 Test Current Model</button>
+            </div>
+        </div>
+    `;
+}
+
 // User Profile API functions
 async function loadUserProfile() {
     try {
@@ -1580,6 +1793,13 @@ function resetProfileForm() {
 function switchSettingsTab(tabName) {
     activeSettingsTab = tabName;
     showPanel('settings'); // Refresh the entire settings panel with the new active tab
+    
+    // Load specific data for the LLM tab
+    if (tabName === 'llm') {
+        setTimeout(() => {
+            updateLLMSettingsUI();
+        }, 100); // Small delay to ensure DOM is ready
+    }
 }
 
 // Collection Management Functions
@@ -2505,4 +2725,86 @@ async function convertImageToCaption(file) {
     }
     
     return data.caption;
+}
+
+// LLM Settings Functions
+async function refreshLLMSettings() {
+    try {
+        await loadAvailableLLMs();
+        await loadCurrentLLM();
+        if (activeSettingsTab === 'llm') {
+            updateLLMSettingsUI();
+        }
+        showNotification('LLM settings refreshed', 'success');
+    } catch (error) {
+        console.error('Error refreshing LLM settings:', error);
+        showNotification('Failed to refresh LLM settings', 'error');
+    }
+}
+
+async function testCurrentLLM() {
+    try {
+        const currentInfo = await fetch('/api/llm/current').then(r => r.json());
+        showNotification(`Testing ${currentInfo.display_name}...`, 'info');
+        
+        // Find current config ID
+        let currentConfigId = selectedLLMId;
+        if (!currentConfigId) {
+            currentConfigId = Object.keys(availableLLMs).find(id => availableLLMs[id].is_current) || 'anthropic_large';
+        }
+        
+        const testResponse = await fetch('/api/llm/test/' + currentConfigId, {
+            method: 'POST'
+        });
+        
+        const result = await testResponse.json();
+        
+        if (result.success) {
+            showNotification(`✅ ${result.config_name}: ${result.response}`, 'success');
+        } else {
+            showNotification(`❌ Test failed: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error testing LLM:', error);
+        showNotification('Failed to test LLM', 'error');
+    }
+}
+
+function updateLLMSettingsUI() {
+    updateCurrentLLMInfo();
+    updateDefaultLLMSelector();
+    updateLLMModelsList();
+    updateProviderConfigs();
+}
+
+function updateCurrentLLMInfo() {
+    const infoElement = document.getElementById('currentLLMInfo');
+    if (!infoElement) return;
+    
+    if (!selectedLLMId || !availableLLMs[selectedLLMId]) {
+        // Find current model from available LLMs
+        const currentConfigId = Object.keys(availableLLMs).find(id => availableLLMs[id].is_current);
+        if (!currentConfigId) {
+            infoElement.innerHTML = '<div class="no-data">No model selected</div>';
+            return;
+        }
+        selectedLLMId = currentConfigId;
+    }
+    
+    const config = availableLLMs[selectedLLMId];
+    const statusClass = config.has_api_key || config.provider !== 'anthropic' ? 'available' : 'unavailable';
+    
+    infoElement.innerHTML = `
+        <div class="current-llm-card">
+            <div class="llm-header">
+                <span class="llm-name">${config.display_name}</span>
+                <span class="llm-status ${statusClass}">●</span>
+            </div>
+            <div class="llm-details">
+                <span class="llm-provider">${config.provider.toUpperCase()}</span>
+                <span class="llm-size">${config.size}</span>
+                <span class="llm-model">${config.model}</span>
+            </div>
+        </div>
+    `;
 }

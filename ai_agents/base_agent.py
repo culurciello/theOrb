@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from anthropic import Anthropic
 import os
 
 class BaseAgent(ABC):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize the base agent."""
-        self.client = Anthropic(api_key=api_key or os.getenv('ANTHROPIC_API_KEY'))
+        from llm_providers import llm_manager
+        self.llm_manager = llm_manager
         self.debug = True
 
     @abstractmethod
@@ -29,15 +29,10 @@ class BaseAgent(ABC):
 
     def _make_api_call(self, messages: List[Dict[str, str]], system_prompt: str, 
                       max_tokens: int = 1000) -> str:
-        """Make an API call to Claude."""
+        """Make an API call using the current LLM provider."""
         try:
-            response = self.client.messages.create(
-                model="claude-3-5-sonnet-20241022",
-                max_tokens=max_tokens,
-                system=system_prompt,
-                messages=messages
-            )
-            return response.content[0].text
+            response = self.llm_manager.generate_response(messages, system_prompt)
+            return response
         except Exception as e:
             if self.debug:
                 print(f"API call error in {self.get_agent_name()}: {str(e)}")

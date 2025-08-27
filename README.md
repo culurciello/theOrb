@@ -91,6 +91,20 @@ Agents:
     - Flow: user prompt with 'deep research' --> search user data, web for 5-10 articles on the topic --> combine and send to main LLM --> response
     - Prompt: perform deep research on the topic, search the user data, web, news for related articles
 
+### LLMs
+
+Orvin Orb can use multiple large language models (LLMs).
+
+Implemented in Settings is the ability to switch between:
+
+- Anthropic Claude (default)
+    - large: claude-sonnet-4-20250514
+    - small: claude-3-5-haiku-20241022
+- Ollama
+    - large: gpt-oss:latest
+    - small: qwen3:0.6b
+- vLLM
+
 
 
 ## OS X app

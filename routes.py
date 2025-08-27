@@ -1072,3 +1072,99 @@ def image_caption():
                 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# LLM Management Routes
+@bp.route('/api/llm/configs', methods=['GET'])
+def get_llm_configs():
+    """Get all available LLM configurations."""
+    try:
+        from llm_config import llm_config_manager
+        configs = llm_config_manager.get_available_configs()
+        return jsonify(configs)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/llm/current', methods=['GET'])
+def get_current_llm():
+    """Get current LLM configuration."""
+    try:
+        from llm_providers import llm_manager
+        current_info = llm_manager.get_current_provider_info()
+        return jsonify(current_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/llm/current', methods=['POST'])
+def set_current_llm():
+    """Set the current LLM configuration."""
+    try:
+        data = request.get_json()
+        config_id = data.get('config_id')
+        
+        if not config_id:
+            return jsonify({'error': 'config_id is required'}), 400
+        
+        from llm_providers import llm_manager
+        if llm_manager.switch_provider(config_id):
+            return jsonify({'success': True, 'config_id': config_id})
+        else:
+            return jsonify({'error': 'Invalid config_id or provider not available'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/llm/configs/<config_id>', methods=['PUT'])
+def update_llm_config(config_id):
+    """Update a specific LLM configuration."""
+    try:
+        data = request.get_json()
+        
+        from llm_config import llm_config_manager
+        if llm_config_manager.update_config(config_id, data):
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Invalid config_id'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/llm/status', methods=['GET'])
+def get_llm_status():
+    """Get status of all LLM providers."""
+    try:
+        from llm_providers import llm_manager
+        status = llm_manager.get_provider_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/llm/test/<config_id>', methods=['POST'])
+def test_llm_config(config_id):
+    """Test a specific LLM configuration."""
+    try:
+        from llm_config import llm_config_manager
+        from llm_providers import LLMProviderFactory
+        
+        if config_id not in llm_config_manager.configs:
+            return jsonify({'error': 'Invalid config_id'}), 404
+        
+        config = llm_config_manager.configs[config_id]
+        provider = LLMProviderFactory.create_provider(config)
+        
+        # Test with a simple message
+        test_messages = [{"role": "user", "content": "Say 'Hello, I am working!' and nothing else."}]
+        
+        if not provider.is_available():
+            return jsonify({
+                'success': False,
+                'error': f'Provider {config.display_name} is not available'
+            })
+        
+        response = provider.generate_response(test_messages, "You are a helpful assistant.")
+        
+        return jsonify({
+            'success': True,
+            'response': response,
+            'config_name': config.display_name
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

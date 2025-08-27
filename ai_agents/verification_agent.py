@@ -110,8 +110,9 @@ Be conversational, helpful, and accurate in your responses."""
         messages = self._build_messages(user_message, context, conversation_history)
         
         if self.debug:
+            current_model = self.llm_manager.get_current_provider_info()
             print(f"\n🔵 {self.get_agent_name()} - INITIAL RESPONSE REQUEST")
-            print(f"Model: claude-3-5-sonnet-20241022")
+            print(f"Model: {current_model.get('model', 'unknown')} ({current_model.get('display_name', 'unknown')})")
             print(f"System: {self.get_system_prompt()}")
         
         response_text = self._make_api_call(messages, self.get_system_prompt(), max_tokens=1000)
