@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, List
 from .base_agent import BaseAgent
+from .basic_agent import BasicAgent
 from .verification_agent import VerificationAgent
 from .deep_research_agent import DeepResearchAgent
 
@@ -13,12 +14,13 @@ class AgentManager:
     def _initialize_agents(self):
         """Initialize all available agents."""
         self._agents = {
+            'basic': BasicAgent(self.api_key),
             'verification': VerificationAgent(self.api_key),
             'deep_research': DeepResearchAgent(self.api_key)
         }
         
-        # Set verification agent as default
-        self.default_agent = 'verification'
+        # Set basic agent as default
+        self.default_agent = 'basic'
     
     def get_available_agents(self) -> List[Dict[str, str]]:
         """Get list of available agents with their descriptions."""
@@ -35,13 +37,14 @@ class AgentManager:
     def _get_agent_description(self, agent_name: str) -> str:
         """Get description for each agent."""
         descriptions = {
+            'basic': 'Fast single-pass responses without verification',
             'verification': 'Verifies information accuracy using a two-step process',
             'deep_research': 'Performs deep research by searching user data and web sources'
         }
         return descriptions.get(agent_name, 'AI agent')
     
     def get_agent(self, agent_name: Optional[str] = None) -> BaseAgent:
-        """Get an agent by name, defaults to verification agent."""
+        """Get an agent by name, defaults to basic agent."""
         if not agent_name or agent_name not in self._agents:
             agent_name = self.default_agent
         return self._agents[agent_name]
@@ -81,5 +84,21 @@ class AgentManager:
         if any(keyword in message_lower for keyword in research_keywords):
             return 'deep_research'
         
-        # Default to verification agent
-        return 'verification'
+        # Check for basic/fast response keywords
+        basic_keywords = [
+            'quick', 'fast', 'simple', 'basic', 'no verification'
+        ]
+        
+        if any(keyword in message_lower for keyword in basic_keywords):
+            return 'basic'
+        
+        # Check for verification keywords
+        verification_keywords = [
+            'verify', 'check', 'accurate', 'verify this', 'is this correct'
+        ]
+        
+        if any(keyword in message_lower for keyword in verification_keywords):
+            return 'verification'
+        
+        # Default to basic agent for faster responses
+        return 'basic'

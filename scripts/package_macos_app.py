@@ -115,9 +115,11 @@ def copy_app_files(resources_dir):
     # Files and directories to copy
     items_to_copy = [
         "app.py",
-        "ai_agent.py", 
+        "ai_agents", 
         "database.py",
         "document_processor.py",
+        "llm_config.py",
+        "llm_providers.py",
         "models.py",
         "prompt.txt",
         "requirements.txt",

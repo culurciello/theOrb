@@ -16,7 +16,8 @@ Chat Interface:
 - buttons: list all previous chats, new chat
 - user can click on a previous chat --> open it
 - new chat button --> create new chat
-- in chat drop list: can select a collection 
+- in chat drop list: can select a collection
+- button to add a chat to a existing or new collection
 
 Collection interface:
 - buttons: list with all previous collections, new collection
@@ -82,6 +83,10 @@ Specifications:
 
 Agents:
 
+1. Basic chat Agent: 'basic agent'
+    - flow: single pass to main LLM
+    - prompt: the user prompt directly
+
 1. AI agent: 'verification agent'
     - Flow: user prompt --> main LLM response --> verification AI agent --> final response
     - Prompt: verify that the information reported by the main LLM is correct, given the user data and collection provided.
@@ -130,3 +135,17 @@ To run the app:
 If no errors, the application will be available as web page:
 
 3. Open Safari to: http://localhost:3000
+
+
+
+## Issues
+
+1. Large CLaude models do much better on Q/A on your data. They provide more context and better answers than Ollama models (GPT-oss and qwen) 
+2. LLM API keys - how to make it easier for users to input these?
+3. Ollama needs to be pre-installed
+
+
+
+## To do
+
+1. WISH: woudl like to activate it like Spotlight search on Mac OS X!

@@ -67,7 +67,10 @@
     <div class="chat-messages-display" id="chatMessagesDisplay">
         <div class="chat-messages-header">
             <h3 id="chatTitle">New Conversation</h3>
-            <button class="close-chat-btn" id="closeChatBtn">×</button>
+            <div class="chat-header-actions">
+                <button class="save-to-collection-btn" id="saveToCollectionBtn" title="Save chat to collection">📁</button>
+                <button class="close-chat-btn" id="closeChatBtn">×</button>
+            </div>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="input-container">
@@ -164,6 +167,59 @@
                 <div class="progress-bar">
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Save to Collection Modal -->
+    <div class="modal" id="saveToCollectionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Save Chat to Collection</h3>
+                <span class="close-btn" onclick="closeSaveToCollectionModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Choose an option:</label>
+                    <div class="save-option-buttons">
+                        <button type="button" class="btn btn-secondary" onclick="selectExistingCollection()" id="existingCollectionBtn">
+                            📂 Add to Existing Collection
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="selectNewCollection()" id="newCollectionBtn">
+                            ➕ Create New Collection
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="existing-collection-section" id="existingCollectionSection" style="display:none;">
+                    <div class="form-group">
+                        <label for="existingCollectionSelect" class="form-label">Select Collection:</label>
+                        <select class="form-input" id="existingCollectionSelect">
+                            <option value="">Choose a collection...</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="new-collection-section" id="newCollectionSection" style="display:none;">
+                    <div class="form-group">
+                        <label for="newCollectionNameInput" class="form-label">Collection Name:</label>
+                        <input type="text" class="form-input" id="newCollectionNameInput" placeholder="Enter collection name...">
+                    </div>
+                </div>
+                
+                <div class="save-info">
+                    <p><strong>What will be saved:</strong></p>
+                    <ul>
+                        <li>Complete conversation history with all messages</li>
+                        <li>Timestamps and verification status</li>
+                        <li>Agent and collection context used</li>
+                        <li>Searchable content for future reference</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSaveToCollectionModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveChatToCollection()" id="saveConfirmBtn" disabled>Save Chat</button>
             </div>
         </div>
     </div>

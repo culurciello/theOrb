@@ -439,6 +439,9 @@ def chat():
             response_text = response_data['response']
             verified = response_data.get('verified')
             images_result = response_data.get('images', [])
+            
+            # Debug logging
+            print(f"DEBUG: Agent response - verified: {verified}, type: {type(verified)}")
 
         # Save user message
         user_msg = Message(
@@ -1167,4 +1170,153 @@ def test_llm_config(config_id):
             'config_name': config.display_name
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/conversations/<int:conversation_id>/save-to-collection', methods=['POST'])
+def save_conversation_to_collection(conversation_id):
+    """Save an entire conversation to a collection as a document."""
+    try:
+        data = request.get_json()
+        collection_id = data.get('collection_id')
+        collection_name = data.get('collection_name')
+        
+        # Get the conversation
+        conversation = Conversation.query.get_or_404(conversation_id)
+        messages = Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
+        
+        if not messages:
+            return jsonify({'error': 'No messages found in conversation'}), 400
+        
+        # Create or get collection
+        collection = None
+        if collection_id:
+            collection = Collection.query.get_or_404(collection_id)
+        elif collection_name:
+            # Check if collection exists
+            collection = Collection.query.filter_by(name=collection_name.strip()).first()
+            if not collection:
+                # Create new collection
+                collection = Collection(name=collection_name.strip())
+                db.session.add(collection)
+                db.session.flush()  # Get the ID without committing
+        else:
+            return jsonify({'error': 'Either collection_id or collection_name must be provided'}), 400
+        
+        # Prepare the conversation content
+        conversation_content = f"# Chat Conversation: {conversation.title or 'Untitled'}\n\n"
+        conversation_content += f"**Date:** {conversation.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        
+        for message in messages:
+            role = "**User:**" if message.role == "user" else "**Assistant:**"
+            conversation_content += f"{role}\n{message.content}\n\n"
+            
+            # Add verification status for assistant messages
+            if message.role == "assistant" and message.verified is not None:
+                status = "✅ Verified" if message.verified else "❌ Not Verified"
+                conversation_content += f"*({status})*\n\n"
+        
+        # Create document record
+        filename = f"chat_{conversation_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.md"
+        document = Document(
+            filename=filename,
+            file_path=f"conversations/{filename}",
+            stored_file_path=None,  # This is text content, not a file
+            original_file_url=None,
+            content=conversation_content,
+            summary=f"Chat conversation from {conversation.created_at.strftime('%Y-%m-%d')} with {len(messages)} messages",
+            file_type='text',
+            file_size=len(conversation_content.encode('utf-8')),
+            mime_type='text/markdown',
+            collection_id=collection.id
+        )
+        
+        # Set categories
+        categories = ['chat', 'conversation']
+        if any(msg.agent_used for msg in messages):
+            categories.append('ai-assisted')
+        document.set_categories(categories)
+        
+        # Set metadata
+        metadata = {
+            'conversation_id': conversation_id,
+            'message_count': len(messages),
+            'agents_used': list(set(msg.agent_used for msg in messages if msg.agent_used)),
+            'collections_used': list(set(msg.collection_used for msg in messages if msg.collection_used)),
+            'created_date': conversation.created_at.isoformat(),
+            'type': 'chat_conversation'
+        }
+        document.set_metadata(metadata)
+        
+        db.session.add(document)
+        
+        # Add to vector store for searchability
+        try:
+            # Create chunks for the conversation
+            chunk_size = 2000  # Reasonable chunk size for conversations
+            content_chunks = []
+            current_chunk = ""
+            
+            for i, message in enumerate(messages):
+                message_text = f"Message {i+1} ({message.role}): {message.content}\n\n"
+                
+                if len(current_chunk + message_text) <= chunk_size:
+                    current_chunk += message_text
+                else:
+                    if current_chunk:
+                        content_chunks.append(current_chunk.strip())
+                    current_chunk = message_text
+            
+            if current_chunk:
+                content_chunks.append(current_chunk.strip())
+            
+            # Add chunks to vector store
+            for chunk_index, chunk_content in enumerate(content_chunks):
+                embedding_id = f"doc_{document.id}_chunk_{chunk_index}"
+                vector_store.add_document(
+                    collection_name=collection.name,
+                    document_id=document.id,
+                    content=chunk_content,
+                    metadata={
+                        'filename': filename,
+                        'chunk_index': chunk_index,
+                        'conversation_id': conversation_id,
+                        'type': 'chat_conversation'
+                    },
+                    embedding_id=embedding_id
+                )
+                
+                # Create chunk record
+                chunk = DocumentChunk(
+                    document_id=document.id,
+                    content=chunk_content,
+                    chunk_index=chunk_index,
+                    embedding_id=embedding_id
+                )
+                chunk.set_vector_metadata({
+                    'collection_name': collection.name,
+                    'added_at': datetime.utcnow().isoformat()
+                })
+                db.session.add(chunk)
+        
+        except Exception as vector_error:
+            # Vector store operation failed, but we can still save to database
+            print(f"Warning: Vector store operation failed: {vector_error}")
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Conversation saved to collection successfully',
+            'collection': {
+                'id': collection.id,
+                'name': collection.name
+            },
+            'document': {
+                'id': document.id,
+                'filename': document.filename
+            }
+        })
+    
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

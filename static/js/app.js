@@ -115,6 +115,13 @@ function setupEventListeners() {
         chatMessagesDisplay.classList.remove('show');
     });
 
+    // Save to collection button
+    document.addEventListener('click', function(e) {
+        if (e.target.id === 'saveToCollectionBtn') {
+            showSaveToCollectionModal();
+        }
+    });
+
     // Collection selector change handler
     collectionSelector.addEventListener('change', function() {
         const collectionId = this.value;
@@ -740,7 +747,8 @@ async function loadAvailableAgents() {
         console.error('Error loading agents:', error);
         // Set default agents if API fails
         availableAgents = [
-            { name: 'verification', display_name: 'Verification Agent', description: 'Verifies information accuracy', is_default: true },
+            { name: 'basic', display_name: 'Basic Agent', description: 'Fast single-pass responses without verification', is_default: true },
+            { name: 'verification', display_name: 'Verification Agent', description: 'Verifies information accuracy', is_default: false },
             { name: 'deep_research', display_name: 'Deep Research Agent', description: 'Performs comprehensive research', is_default: false }
         ];
         updateAgentSelector();
@@ -1123,6 +1131,7 @@ async function sendMessage() {
             loadConversations();
         }
         
+        console.log('Response data:', data); // Debug log
         addMessage('assistant', data.response, data.verified, data.images);
         
     } catch (error) {
@@ -1132,6 +1141,7 @@ async function sendMessage() {
 }
 
 function addMessage(role, content, verified = null, images = null) {
+    console.log(`Adding message: role=${role}, verified=${verified}`); // Debug log
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${role}`;
     
@@ -1139,6 +1149,7 @@ function addMessage(role, content, verified = null, images = null) {
     if (role === 'assistant' && verified !== null) {
         const badgeClass = verified ? 'verified' : 'unverified';
         const badgeText = verified ? '✓ Verified' : '⚠ Unverified';
+        console.log(`Creating badge: ${badgeClass} - ${badgeText}`); // Debug log
         verificationBadge = `<div class="verification-badge ${badgeClass}">${badgeText}</div>`;
     }
     
@@ -2807,4 +2818,144 @@ function updateCurrentLLMInfo() {
             </div>
         </div>
     `;
+}
+
+// Save to Collection Modal Functions
+function showSaveToCollectionModal() {
+    if (!currentConversationId) {
+        showSmartSuggestion('❌ No active conversation to save');
+        return;
+    }
+    
+    const modal = document.getElementById('saveToCollectionModal');
+    const existingCollectionSelect = document.getElementById('existingCollectionSelect');
+    
+    // Populate existing collections dropdown
+    existingCollectionSelect.innerHTML = '<option value="">Choose a collection...</option>';
+    collections.forEach(collection => {
+        const option = document.createElement('option');
+        option.value = collection.id;
+        option.textContent = collection.name;
+        existingCollectionSelect.appendChild(option);
+    });
+    
+    // Reset modal state
+    document.getElementById('existingCollectionSection').style.display = 'none';
+    document.getElementById('newCollectionSection').style.display = 'none';
+    document.getElementById('saveConfirmBtn').disabled = true;
+    document.getElementById('newCollectionNameInput').value = '';
+    
+    // Reset button states
+    document.getElementById('existingCollectionBtn').classList.remove('active');
+    document.getElementById('newCollectionBtn').classList.remove('active');
+    
+    modal.style.display = 'block';
+}
+
+function closeSaveToCollectionModal() {
+    document.getElementById('saveToCollectionModal').style.display = 'none';
+}
+
+function selectExistingCollection() {
+    document.getElementById('existingCollectionSection').style.display = 'block';
+    document.getElementById('newCollectionSection').style.display = 'none';
+    document.getElementById('existingCollectionBtn').classList.add('active');
+    document.getElementById('newCollectionBtn').classList.remove('active');
+    
+    // Enable save button if collection is selected
+    const select = document.getElementById('existingCollectionSelect');
+    document.getElementById('saveConfirmBtn').disabled = !select.value;
+    
+    // Add change listener for validation
+    select.addEventListener('change', function() {
+        document.getElementById('saveConfirmBtn').disabled = !this.value;
+    });
+}
+
+function selectNewCollection() {
+    document.getElementById('newCollectionSection').style.display = 'block';
+    document.getElementById('existingCollectionSection').style.display = 'none';
+    document.getElementById('newCollectionBtn').classList.add('active');
+    document.getElementById('existingCollectionBtn').classList.remove('active');
+    
+    // Enable save button if name is entered
+    const input = document.getElementById('newCollectionNameInput');
+    document.getElementById('saveConfirmBtn').disabled = !input.value.trim();
+    
+    // Add input listener for validation
+    input.addEventListener('input', function() {
+        document.getElementById('saveConfirmBtn').disabled = !this.value.trim();
+    });
+    
+    // Focus the input
+    input.focus();
+}
+
+async function saveChatToCollection() {
+    if (!currentConversationId) {
+        showSmartSuggestion('❌ No active conversation to save');
+        return;
+    }
+    
+    const existingCollectionSelect = document.getElementById('existingCollectionSelect');
+    const newCollectionNameInput = document.getElementById('newCollectionNameInput');
+    const saveConfirmBtn = document.getElementById('saveConfirmBtn');
+    
+    // Determine which option is selected
+    let collection_id = null;
+    let collection_name = null;
+    
+    if (document.getElementById('existingCollectionSection').style.display === 'block') {
+        collection_id = parseInt(existingCollectionSelect.value);
+        if (!collection_id) {
+            showSmartSuggestion('❌ Please select a collection');
+            return;
+        }
+    } else if (document.getElementById('newCollectionSection').style.display === 'block') {
+        collection_name = newCollectionNameInput.value.trim();
+        if (!collection_name) {
+            showSmartSuggestion('❌ Please enter a collection name');
+            return;
+        }
+    } else {
+        showSmartSuggestion('❌ Please select an option');
+        return;
+    }
+    
+    // Disable button and show loading
+    saveConfirmBtn.disabled = true;
+    saveConfirmBtn.textContent = 'Saving...';
+    
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}/save-to-collection`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                collection_id: collection_id,
+                collection_name: collection_name
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            closeSaveToCollectionModal();
+            showSmartSuggestion(`✅ Chat saved to collection "${result.collection.name}" successfully!`);
+            
+            // Refresh collections list to include new collection if created
+            if (collection_name) {
+                await loadCollections();
+            }
+        } else {
+            throw new Error(result.error || 'Failed to save chat');
+        }
+    } catch (error) {
+        console.error('Error saving chat to collection:', error);
+        showSmartSuggestion(`❌ Error saving chat: ${error.message}`);
+    } finally {
+        saveConfirmBtn.disabled = false;
+        saveConfirmBtn.textContent = 'Save Chat';
+    }
 }
