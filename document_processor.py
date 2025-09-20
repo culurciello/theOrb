@@ -1,8 +1,4 @@
-import PyPDF2
-import docx
-import markdown
 from typing import List, Dict, Any
-import re
 import numpy as np
 import torch
 import clip
@@ -27,15 +23,11 @@ class DocumentProcessor:
         self._summarizer = None
         self._sentence_model = None
         
-        self.content_categories = [
-            "work", "personal", "general info", "contacts info", 
-            "conversations", "meetings", "notes"
-        ]
         
         self.supported_extensions = {
             'text': ['.txt', '.md', '.markdown', '.pdf', '.doc', '.docx'],
-            'image': ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif'],
-            'video': ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'],
+            # 'image': ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif'],  # DISABLED: multimodal processing
+            # 'video': ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'],  # DISABLED: multimodal processing
             'database': ['.db', '.sqlite', '.sqlite3'],
             'table': ['.csv', '.xlsx', '.xls']
         }
@@ -95,25 +87,22 @@ class DocumentProcessor:
                 mime_type, _ = mimetypes.guess_type(file_path)
                 result['mime_type'] = mime_type
             
-            # Map new pipeline output to old format structure
+            # Map new pipeline output to old format structure (text-only processing)
             if result.get('file_type') == 'text':
                 # Text pipeline output: [link, category, summary, embedding_list]
                 return self._format_text_output(result)
-            elif result.get('file_type') == 'image':
-                # Image pipeline output: [link, caption]
-                return self._format_image_output(result)
             elif result.get('file_type') == 'table':
                 # Table pipeline output: [link, JSON]
                 return self._format_table_output(result)
-            elif result.get('file_type') == 'multimodal_text':
-                # Multimodal text output: [link, category, summary, embedding_list, image_list, tables_list]
-                return self._format_multimodal_text_output(result)
-            elif result.get('file_type') == 'video':
-                # Video pipeline output: [link, key_frames_list, caption_list]
-                return self._format_video_output(result)
-            elif result.get('file_type') == 'multimodal_webpage':
-                # Webpage output: like multimodal text + videos
-                return self._format_webpage_output(result)
+            # DISABLED: multimodal processing
+            # elif result.get('file_type') == 'image':
+            #     return self._format_image_output(result)
+            # elif result.get('file_type') == 'multimodal_text':
+            #     return self._format_multimodal_text_output(result)
+            # elif result.get('file_type') == 'video':
+            #     return self._format_video_output(result)
+            # elif result.get('file_type') == 'multimodal_webpage':
+            #     return self._format_webpage_output(result)
         
         return result
     
@@ -259,83 +248,3 @@ class DocumentProcessor:
         """Generate a summary of the text."""
         return self.pipeline_processor.text_pipeline.generate_summary(text)
     
-    @staticmethod
-    def extract_text_from_file(file_path: str, file_type: str) -> str:
-        """Extract text content from various file types."""
-        try:
-            if file_type.lower() == 'pdf':
-                return DocumentProcessor._extract_from_pdf(file_path)
-            elif file_type.lower() in ['doc', 'docx']:
-                return DocumentProcessor._extract_from_docx(file_path)
-            elif file_type.lower() == 'txt':
-                return DocumentProcessor._extract_from_txt(file_path)
-            elif file_type.lower() in ['md', 'markdown']:
-                return DocumentProcessor._extract_from_markdown(file_path)
-            else:
-                raise ValueError(f"Unsupported file type: {file_type}")
-        except Exception as e:
-            raise Exception(f"Error processing {file_type} file: {str(e)}")
-
-    @staticmethod
-    def _extract_from_pdf(file_path: str) -> str:
-        """Extract text from PDF file."""
-        text = ""
-        with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-        return text.strip()
-
-    @staticmethod
-    def _extract_from_docx(file_path: str) -> str:
-        """Extract text from DOCX file."""
-        doc = docx.Document(file_path)
-        text = ""
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
-        return text.strip()
-
-    @staticmethod
-    def _extract_from_txt(file_path: str) -> str:
-        """Extract text from TXT file."""
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return file.read().strip()
-
-    @staticmethod
-    def _extract_from_markdown(file_path: str) -> str:
-        """Extract text from Markdown file."""
-        with open(file_path, 'r', encoding='utf-8') as file:
-            md_content = file.read()
-            html = markdown.markdown(md_content)
-            text = re.sub('<.*?>', '', html)
-            return text.strip()
-
-    @staticmethod
-    def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-        """Split text into overlapping chunks for better retrieval."""
-        if len(text) <= chunk_size:
-            return [text]
-        
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + chunk_size
-            
-            if end >= len(text):
-                chunks.append(text[start:])
-                break
-            
-            chunk = text[start:end]
-            last_period = chunk.rfind('.')
-            last_newline = chunk.rfind('\n')
-            
-            break_point = max(last_period, last_newline)
-            
-            if break_point > start + chunk_size // 2:
-                end = start + break_point + 1
-            
-            chunks.append(text[start:end].strip())
-            start = end - overlap
-        
-        return [chunk for chunk in chunks if chunk.strip()]

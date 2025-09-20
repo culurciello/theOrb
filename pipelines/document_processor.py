@@ -25,13 +25,13 @@ class DocumentProcessor:
     """
     
     def __init__(self):
-        # Initialize all pipelines
+        # Initialize text-only pipelines (multimodal disabled for now)
         self.text_pipeline = TextPipeline()
-        self.image_pipeline = ImagePipeline()
+        # self.image_pipeline = ImagePipeline()  # DISABLED: multimodal processing
         self.table_pipeline = TablePipeline()
-        self.multimodal_text_pipeline = MultiModalTextPipeline()
-        self.video_pipeline = VideoPipeline()
-        self.multimodal_webpage_pipeline = MultiModalWebpagePipeline()
+        # self.multimodal_text_pipeline = MultiModalTextPipeline()  # DISABLED: multimodal processing
+        # self.video_pipeline = VideoPipeline()  # DISABLED: multimodal processing
+        # self.multimodal_webpage_pipeline = MultiModalWebpagePipeline()  # DISABLED: multimodal processing
         
         # File type mappings
         self.file_type_mapping = {
@@ -66,20 +66,23 @@ class DocumentProcessor:
             
             file_type = self._determine_file_type(file_path_obj.suffix.lower())
             
-            # Route to appropriate pipeline
+            # Route to appropriate pipeline (text-only processing enabled)
             if file_type == 'text':
                 return self.text_pipeline.process(file_path)
             elif file_type == 'pdf':
-                # PDF can be multimodal - use multimodal text pipeline
-                return self.multimodal_text_pipeline.process(file_path)
-            elif file_type == 'image':
-                return self.image_pipeline.process(file_path)
-            elif file_type == 'video':
-                return self.video_pipeline.process(file_path)
+                # PDF processing - use text pipeline only (multimodal disabled)
+                return self.text_pipeline.process(file_path)
             elif file_type == 'table':
                 return self.table_pipeline.process(file_path)
+            elif file_type == 'image':
+                # return self.image_pipeline.process(file_path)  # DISABLED: multimodal processing
+                raise ValueError(f"Image processing disabled - file type not supported: {file_path_obj.suffix}")
+            elif file_type == 'video':
+                # return self.video_pipeline.process(file_path)  # DISABLED: multimodal processing
+                raise ValueError(f"Video processing disabled - file type not supported: {file_path_obj.suffix}")
             elif file_type == 'webpage':
-                return self.multimodal_webpage_pipeline.process(file_path)
+                # return self.multimodal_webpage_pipeline.process(file_path)  # DISABLED: multimodal processing
+                raise ValueError(f"Webpage processing disabled - file type not supported: {file_path_obj.suffix}")
             else:
                 raise ValueError(f"Unsupported file type: {file_path_obj.suffix}")
                 

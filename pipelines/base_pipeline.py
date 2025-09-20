@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sentence_transformers import SentenceTransformer
+import torch
+import numpy as np
 
 class BasePipeline(ABC):
     """Base class for all document processing pipelines."""
@@ -12,6 +14,10 @@ class BasePipeline(ABC):
     
     def __init__(self):
         self._sentence_model = None
+
+        # GPU optimization setup
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+        self.batch_size = self._get_optimal_batch_size()
     
     @property
     def sentence_model(self):
@@ -26,14 +32,72 @@ class BasePipeline(ABC):
         """Process a file and return structured data for database storage."""
         pass
     
+    def _get_optimal_batch_size(self) -> int:
+        """Get optimal batch size based on device capabilities."""
+        base_batch_size = 32
+
+        if self.device.type == "cuda":
+            # GPU detected - increase batch size significantly
+            return min(128, base_batch_size * 2)
+        elif self.device.type == "mps":
+            # Apple Silicon - moderate increase
+            return min(96, base_batch_size + 32)
+        else:
+            # CPU - keep conservative
+            return base_batch_size
+
     def get_sentence_embeddings(self, text_chunks: List[str]) -> List[List[float]]:
-        """Generate sentence embeddings for text chunks."""
+        """Generate sentence embeddings for text chunks with optimized batching."""
         try:
-            embeddings = self.sentence_model.encode(text_chunks)
-            return embeddings.tolist()
+            embeddings = self.batch_embed_optimized(text_chunks)
+            return embeddings.tolist() if isinstance(embeddings, np.ndarray) else embeddings
         except Exception as e:
             print(f"Error generating embeddings: {e}")
             return []
+
+    def batch_embed_optimized(self, texts: List[str], batch_size: Optional[int] = None) -> np.ndarray:
+        """
+        Optimized batch embedding processing with GPU acceleration.
+        Based on kb/ingest.py batch_embed function.
+        """
+        if not texts:
+            return np.array([])
+
+        if batch_size is None:
+            batch_size = self.batch_size
+
+        # For small batches, use simple encoding
+        if len(texts) <= batch_size:
+            return self.sentence_model.encode(texts)
+
+        # For large batches, use optimized processing
+        embeddings = []
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+
+        if total_batches > 1:
+            print(f"\033[94m  Processing {len(texts)} texts in {total_batches} batches (batch_size={batch_size})...\033[0m")
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+
+            # Use SentenceTransformer's optimized encoding
+            batch_embeddings = self.sentence_model.encode(
+                batch,
+                batch_size=len(batch),
+                show_progress_bar=False,
+                device=self.device
+            )
+
+            if isinstance(batch_embeddings, list):
+                embeddings.extend(batch_embeddings)
+            else:
+                embeddings.append(batch_embeddings)
+
+        # Combine all embeddings
+        if embeddings and isinstance(embeddings[0], np.ndarray):
+            return np.vstack(embeddings)
+        else:
+            return np.array(embeddings)
     
     def categorize_content(self, content: str) -> List[str]:
         """Categorize content using keyword matching."""
@@ -66,30 +130,62 @@ class BasePipeline(ABC):
         return assigned_categories
     
     def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-        """Split text into overlapping chunks."""
-        if len(text) <= chunk_size:
+        """Split text into overlapping chunks (backward compatibility)."""
+        return self.chunk_text_smart(text, chunk_tokens=int(chunk_size/1.3), overlap_tokens=int(overlap/1.3))
+
+    def chunk_text_smart(self, text: str, chunk_tokens: int = 500, overlap_tokens: int = 50) -> List[str]:
+        """
+        Smart token-aware chunking inspired by kb/ingest.py.
+
+        Args:
+            text: Text to chunk
+            chunk_tokens: Approximate tokens per chunk (default 500)
+            overlap_tokens: Approximate token overlap (default 50)
+
+        Returns:
+            List of text chunks
+        """
+        if not text.strip():
+            return []
+
+        # Simple word-based approximation (1 word ≈ 1.3 tokens)
+        words = text.split()
+        chunk_words = int(chunk_tokens * 0.77)  # Approximate conversion
+        overlap_words = int(overlap_tokens * 0.77)
+
+        if len(words) <= chunk_words:
             return [text]
-        
+
         chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + chunk_size
-            
-            if end >= len(text):
-                chunks.append(text[start:])
+        i = 0
+
+        while i < len(words):
+            chunk_end = min(i + chunk_words, len(words))
+            chunk = " ".join(words[i:chunk_end])
+
+            # Try to break at sentence boundaries for better chunks
+            if chunk_end < len(words):
+                # Look for sentence endings near the chunk boundary
+                chunk_text = " ".join(words[i:chunk_end])
+                last_period = chunk_text.rfind('.')
+                last_exclamation = chunk_text.rfind('!')
+                last_question = chunk_text.rfind('?')
+
+                best_break = max(last_period, last_exclamation, last_question)
+
+                # If we found a good sentence break in the last quarter of the chunk
+                if best_break > len(chunk_text) * 0.75:
+                    # Count words up to the sentence break
+                    words_to_break = len(chunk_text[:best_break + 1].split())
+                    chunk_end = i + words_to_break
+                    chunk = " ".join(words[i:chunk_end])
+
+            chunks.append(chunk.strip())
+
+            if chunk_end >= len(words):
                 break
-            
-            chunk = text[start:end]
-            last_period = chunk.rfind('.')
-            last_newline = chunk.rfind('\n')
-            
-            break_point = max(last_period, last_newline)
-            
-            if break_point > start + chunk_size // 2:
-                end = start + break_point + 1
-            
-            chunks.append(text[start:end].strip())
-            start = end - overlap
-        
+
+            # Move forward with overlap
+            i += max(1, chunk_words - overlap_words)
+
         return [chunk for chunk in chunks if chunk.strip()]

@@ -14,10 +14,40 @@ class TextPipeline(BasePipeline):
     - send first 1000 words --> get summary, get category
     - send to database: [link to original file, category, summary, embedding list]
     """
-    
+
     def __init__(self):
         super().__init__()
         self._summarizer = None
+
+    def _read_text_file_with_encoding_detection(self, file_path: Path) -> str:
+        """
+        Read text file with automatic encoding detection.
+        Tries multiple encodings and falls back to UTF-8 with error replacement.
+        """
+        # Try multiple encodings in order of preference
+        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as file:
+                    content = file.read().strip()
+                    if content:
+                        print(f"\033[92m✓ Successfully read {file_path} with {encoding} encoding\033[0m")
+                        return content
+            except UnicodeDecodeError:
+                continue
+            except Exception:
+                continue
+
+        # If all encodings fail, try binary mode and decode with errors='replace'
+        try:
+            with open(file_path, 'rb') as file:
+                raw_content = file.read()
+                content = raw_content.decode('utf-8', errors='replace').strip()
+                print(f"\033[93m⚠️  Using UTF-8 with character replacement for {file_path}\033[0m")
+                return content
+        except Exception as e:
+            raise Exception(f"Could not read text file {file_path} with any encoding: {str(e)}")
     
     @property
     def summarizer(self):
@@ -34,10 +64,10 @@ class TextPipeline(BasePipeline):
         # Extract text content
         content = self.extract_text_from_file(str(file_path))
         
-        # Break into chunks
-        chunks = self.chunk_text(content)
-        
-        # Generate sentence embeddings for chunks
+        # Break into chunks using smart chunking
+        chunks = self.chunk_text_smart(content, chunk_tokens=500, overlap_tokens=50)
+
+        # Generate sentence embeddings for chunks using optimized batching
         embedding_list = self.get_sentence_embeddings(chunks)
         
         # Get first 1000 words for summary and categorization
@@ -113,14 +143,12 @@ class TextPipeline(BasePipeline):
         return text.strip()
 
     def _extract_from_txt(self, file_path: Path) -> str:
-        """Extract text from TXT file."""
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return file.read().strip()
+        """Extract text from TXT file with automatic encoding detection."""
+        return self._read_text_file_with_encoding_detection(file_path)
 
     def _extract_from_markdown(self, file_path: Path) -> str:
-        """Extract text from Markdown file."""
-        with open(file_path, 'r', encoding='utf-8') as file:
-            md_content = file.read()
-            html = markdown.markdown(md_content)
-            text = re.sub('<.*?>', '', html)
-            return text.strip()
+        """Extract text from Markdown file with automatic encoding detection."""
+        md_content = self._read_text_file_with_encoding_detection(file_path)
+        html = markdown.markdown(md_content)
+        text = re.sub('<.*?>', '', html)
+        return text.strip()

@@ -3,8 +3,11 @@
 
 An AI knowledge agent.
 
-- User uploads documents into collections.
-- User can chat with LLM. Every responses is verified against the user data, collections, knowledge.
+- User uploads documents into collections
+- User can chat with multiple LLMs
+- collections can be included into chats
+- uses a database to store documents, collection and embedding of documents
+- data from the collection that is similar to the user prompts is used in the chat conversations
 
 
 ## Interface
@@ -18,11 +21,13 @@ Chat Interface:
 - new chat button --> create new chat
 - in chat drop list: can select a collection
 - button to add a chat to a existing or new collection
+- user can delete previous chats from the list
 
 Collection interface:
 - buttons: list with all previous collections, new collection
 - user can click on a previous collection --> open it, see all files in it, can edit add / remove files or directories
 - new collection button --> create new collection, user can load individual files or entire directories
+- user can delete previous collections from the list
 
 Settings:
 - user data: name, last name, e-mail, address
@@ -109,6 +114,7 @@ Implemented in Settings is the ability to switch between:
     - large: gpt-oss:latest
     - small: qwen3:0.6b
 - vLLM
+	- TBD 
 
 
 
@@ -149,3 +155,27 @@ If no errors, the application will be available as web page:
 ## To do
 
 1. WISH: woudl like to activate it like Spotlight search on Mac OS X!
+
+
+## Questions to test:
+
+
+```
+questions = [
+    "West Lafayette city code: when is a parking permit valid?",
+    "West Lafayette city code: where a pedal carriage shall is not to be operated on?",
+    "West Lafayette city code: when is a waiver of required public improvements needed?",
+    "West Lafayette School: what is the grade level for AP computer science?", 
+    "Lord of rings: Who is the true author of The Red Book of Westmarch within the story?",
+    "Lord of rings: What is the significance of the One Ring's inscription?",
+    "Lord of rings: Why does Gandalf fear Saruman's counsel at Isengard?",
+    "Lord of rings: What role does Tom Bombadil play in the story?",
+    "Lord of rings: How does Boromir fall to temptation?",
+    "Lord of rings: What is the significance of Galadriel's refusal of the Ring?",
+    "Lord of rings: How does Samwise Gamgee prove himself the true Ring-bearer?",
+    "Lord of rings: What role does Gollum ultimately play in the Ring's destruction?",
+    "Lord of rings: What is the Scouring of the Shire, and why is it important?",
+    "Lord of rings: Why does Frodo leave Middle-earth at the end?"
+]
+```
+

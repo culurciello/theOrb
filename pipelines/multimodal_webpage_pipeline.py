@@ -20,6 +20,38 @@ class MultiModalWebpagePipeline:
         self.multimodal_text_pipeline = MultiModalTextPipeline()
         self.video_pipeline = VideoPipeline()
         self.image_pipeline = ImagePipeline()
+
+    def _read_text_file_with_encoding_detection(self, file_path: str) -> str:
+        """
+        Read text file with automatic encoding detection.
+        Tries multiple encodings and falls back to UTF-8 with error replacement.
+        """
+        file_path_obj = Path(file_path)
+
+        # Try multiple encodings in order of preference
+        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+
+        for encoding in encodings:
+            try:
+                with open(file_path_obj, 'r', encoding=encoding) as file:
+                    content = file.read().strip()
+                    if content:
+                        print(f"\033[92m✓ Successfully read {file_path} with {encoding} encoding\033[0m")
+                        return content
+            except UnicodeDecodeError:
+                continue
+            except Exception:
+                continue
+
+        # If all encodings fail, try binary mode and decode with errors='replace'
+        try:
+            with open(file_path_obj, 'rb') as file:
+                raw_content = file.read()
+                content = raw_content.decode('utf-8', errors='replace').strip()
+                print(f"\033[93m⚠️  Using UTF-8 with character replacement for {file_path}\033[0m")
+                return content
+        except Exception as e:
+            raise Exception(f"Could not read text file {file_path} with any encoding: {str(e)}")
     
     def process(self, url_or_file_path: str) -> Dict[str, Any]:
         """Process webpage (URL or local HTML file) according to the pipeline specification."""
@@ -59,12 +91,10 @@ class MultiModalWebpagePipeline:
     def _process_local_html(self, file_path: str) -> Dict[str, Any]:
         """Process a local HTML file."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
+            content = self._read_text_file_with_encoding_detection(file_path)
             soup = BeautifulSoup(content, 'html.parser')
             return self._process_html_content(soup, file_path)
-            
+
         except Exception as e:
             print(f"Error processing HTML file {file_path}: {e}")
             return {

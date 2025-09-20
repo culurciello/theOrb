@@ -1,4 +1,4 @@
-from flask import render_template, request, jsonify, Response, send_file
+from flask import render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -439,9 +439,6 @@ def chat():
             response_text = response_data['response']
             verified = response_data.get('verified')
             images_result = response_data.get('images', [])
-            
-            # Debug logging
-            print(f"DEBUG: Agent response - verified: {verified}, type: {type(verified)}")
 
         # Save user message
         user_msg = Message(
