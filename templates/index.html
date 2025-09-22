@@ -1,222 +1,426 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orb - AI Knowledge Agent</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Orvin - Collections & Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="static/css/styles.css">
+    <style>
+        /* Custom styles for the app */
+        .message {
+            animation: fadeInUp 0.3s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            z-index: 1000;
+            animation: slideInRight 0.3s ease-out;
+            max-width: 400px;
+            word-wrap: break-word;
+        }
+
+        .notification.info {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .notification.success {
+            background: #10b981;
+            color: white;
+        }
+
+        .notification.error {
+            background: #ef4444;
+            color: white;
+        }
+
+        .notification.warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Dark theme variables */
+        [data-theme="dark"] {
+            --bg-primary: #1f2937;
+            --bg-secondary: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #d1d5db;
+            --border-color: #4b5563;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f3f4f6;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #d1d5db;
+        }
+
+        /* File upload styles */
+        .upload-area {
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #8b5cf6;
+            background-color: #faf5ff;
+        }
+
+        .drag-over {
+            border-color: #8b5cf6 !important;
+            background-color: #faf5ff !important;
+        }
+
+        /* Message input auto-resize */
+        .message-input {
+            resize: none;
+            min-height: 60px;
+            max-height: 120px;
+        }
+
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        /* Collection item animations */
+        .collection-item {
+            transition: all 0.2s ease;
+        }
+
+        .collection-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+    </style>
 </head>
-<body>
-
-
-    <!-- Title and Icon -->
-    <div class="orb-header">
-        <div class="orb-header-left">
-            <img src="{{ url_for('static', filename='icon-dark.png') }}" alt="Orb Icon" class="orb-icon" id="orbIcon" style="width:32px;height:32px;vertical-align:middle;margin-right:8px;">
-            <span class="orb-title" style="font-size:1.5em;font-weight:bold;vertical-align:middle;">Orvin Orb</span>
+<body class="h-screen flex flex-col bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center">
+                <span class="text-white text-sm font-bold">O</span>
+            </div>
+            <span class="text-xl font-semibold text-gray-900">Orvin</span>
         </div>
-        <div class="orb-header-right">
-            <button class="theme-toggle-btn" onclick="toggleTheme()" title="Switch Theme">🌙</button>
-        </div>
-    </div>
 
-    <!-- Main Orb -->
-    <div class="orvin-orb" id="mainOrb"></div>
+        <h1 class="text-lg font-medium text-gray-900">Collections & Chat</h1>
 
-    <!-- Vertical Button Column -->
-    <div class="vertical-buttons" id="verticalButtons">
-        <div class="vertical-button" data-panel="collections"></div>
-        <div class="vertical-button" data-panel="chat"></div>
-        <div class="vertical-button" data-panel="settings"></div>
-    </div>
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <span class="text-sm text-gray-600">Theme:</span>
+                <button id="themeToggle" onclick="toggleTheme()" class="flex items-center space-x-2 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                    <svg id="lightIcon" class="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <svg id="darkIcon" class="w-4 h-4 text-gray-700 hidden" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+                    </svg>
+                    <span id="themeText" class="text-sm font-medium text-gray-700">Light</span>
+                </button>
+            </div>
 
-    <!-- Horizontal Button Row -->
-    <div class="horizontal-buttons" id="horizontalButtons">
-    </div>
-
-    <!-- Expanded Panel -->
-    <div class="expanded-panel" id="expandedPanel">
-        <div class="panel-header" id="panelHeader">Welcome to Orb</div>
-        <div class="panel-content" id="panelContent">
-            <div class="panel-text">
-                Click any button to see Orb's features in action.
+            <div class="flex flex-col items-end">
+                <span class="text-xs text-gray-500">Free tier: 0.00 / 1.00 credit</span>
+                <div class="w-24 h-2 bg-gray-200 rounded-full">
+                    <div class="w-0 h-2 bg-purple-600 rounded-full"></div>
+                </div>
             </div>
         </div>
-    </div>
+    </header>
 
-    <!-- Smart Suggestion -->
-    <div class="smart-suggestion" id="smartSuggestion">
-        <div>💡 Save this insight to your Knowledge Tree?</div>
-        <div class="suggestion-buttons">
-            <button class="suggestion-btn" onclick="hideSuggestion()">Save</button>
-            <button class="suggestion-btn" onclick="hideSuggestion()">Dismiss</button>
-        </div>
-    </div>
-
-    <!-- Command Input -->
-    <input type="text" class="command-input" id="commandInput" placeholder="Ask Orb anything...">
-
-    <!-- Chat Messages Display -->
-    <div class="chat-messages-display" id="chatMessagesDisplay">
-        <div class="chat-messages-header">
-            <h3 id="chatTitle">New Conversation</h3>
-            <div class="chat-header-actions">
-                <button class="save-to-collection-btn" id="saveToCollectionBtn" title="Save chat to collection" style="display: none;">📁</button>
-                <button class="close-chat-btn" id="closeChatBtn">×</button>
-            </div>
-        </div>
-        <div class="chat-messages" id="chatMessages"></div>
-        <div class="input-container">
-            <div class="selectors-container">
-                <div class="collection-selector-container">
-                    <select class="collection-selector" id="collectionSelector">
-                        <option value="">No collection selected</option>
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Left Panel - Chat (60%) -->
+        <div class="w-3/5 flex flex-col bg-white border-r border-gray-200">
+            <!-- Chat Controls -->
+            <div class="p-4 border-b border-gray-100">
+                <div class="flex items-center justify-between mb-3">
+                    <select id="llmSelector" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <option>ChatGPT</option>
+                        <option>Claude</option>
+                        <option>Gemini</option>
                     </select>
-                    <span class="collection-status" id="collectionStatus">Select a collection to search your documents</span>
-                </div>
-                <div class="agent-selector-container">
-                    <select class="agent-selector" id="agentSelector">
-                        <option value="">Loading agents...</option>
+
+                    <select id="agentSelector" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                        <option>Default Agent</option>
                     </select>
-                    <span class="agent-status" id="agentStatus">Choose an AI agent for processing</span>
                 </div>
-                <div class="llm-selector-container">
-                    <select class="llm-selector" id="llmSelector">
-                        <option value="">Loading LLMs...</option>
+
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-600">Active Collection:</span>
+                    <select id="activeCollectionSelector" class="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                        <option value="">None selected</option>
                     </select>
-                    <span class="llm-status" id="llmStatus">Choose a language model</span>
                 </div>
             </div>
-            <div class="chat-input-container" id="chatInputContainer">
-                <input type="text" class="chat-input" id="messageInput" placeholder="Ask me anything or drag an image here...">
-                <button class="send-btn" id="sendBtn" title="Send message" onclick="sendMessage()">➤</button>
+
+            <!-- Chat Messages -->
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="text-center text-gray-500 mt-8">
+                    <p>Start a conversation about your selected collection</p>
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="p-4 border-t border-gray-100">
+                <div class="flex space-x-2">
+                    <textarea
+                        id="messageInput"
+                        placeholder="Ask about your collection..."
+                        class="flex-1 p-3 border border-gray-300 rounded-lg resize-none text-sm message-input"
+                        rows="3"
+                    ></textarea>
+                    <button
+                        onclick="handleSendMessage()"
+                        class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 self-end transition-colors"
+                    >
+                        Send
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Hidden file inputs -->
-    <input type="file" id="fileInput" class="file-input" accept=".txt,.pdf,.docx,.doc,.md,.jpg,.jpeg,.png,.bmp,.tiff,.gif,.mp4,.avi,.mov,.mkv,.wmv,.flv,.csv,.xlsx,.xls,.db,.sqlite" multiple>
-    
-    <!-- Directory import modal -->
-    <div class="modal" id="directoryModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Import Directory</h3>
-                <span class="close-btn" onclick="closeDirectoryModal()">&times;</span>
+        <!-- Right Panel (40%) -->
+        <div class="w-2/5 flex flex-col bg-white">
+            <!-- Tab Navigation -->
+            <div class="border-b border-gray-200">
+                <nav class="flex">
+                    <button
+                        id="collectionsTab"
+                        onclick="setActiveTab('collections')"
+                        class="px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600"
+                    >
+                        Collections
+                    </button>
+                    <button
+                        id="validateTab"
+                        onclick="setActiveTab('validate')"
+                        class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    >
+                        Validate
+                    </button>
+                    <button
+                        id="historyTab"
+                        onclick="setActiveTab('history')"
+                        class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    >
+                        History
+                    </button>
+                </nav>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="directoryPath">Directory Path:</label>
-                    <input type="text" id="directoryPath" placeholder="/path/to/your/directory" class="form-input">
-                    <div class="form-help">Enter the full path to the directory you want to import</div>
-                </div>
-                
-                <div class="supported-formats">
-                    <h4>Supported File Types:</h4>
-                    <div class="format-categories">
-                        <div class="format-category">
-                            <strong>Text:</strong> .txt, .md, .pdf, .doc, .docx
+
+            <!-- Tab Content -->
+            <div class="flex-1 overflow-y-auto p-4">
+                <!-- Collections Tab -->
+                <div id="collectionsContent" class="space-y-6">
+                    <!-- Create Collection -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Create New Collection</h3>
+                        <div class="flex space-x-2 mb-4">
+                            <input
+                                type="text"
+                                id="newCollectionName"
+                                placeholder="Collection name..."
+                                class="flex-1 p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                            <button
+                                onclick="handleCreateCollection()"
+                                class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition-colors"
+                            >
+                                Create
+                            </button>
                         </div>
-                        <div class="format-category">
-                            <strong>Images:</strong> .jpg, .jpeg, .png, .bmp, .tiff, .gif
+
+                        <!-- Upload Area for new collection -->
+                        <div id="newCollectionUploadArea" onclick="triggerFileUploadForNewCollection()" class="upload-area border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer">
+                            <div class="flex flex-col items-center space-y-2">
+                                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <p class="text-sm text-gray-600">
+                                    Drop files here or
+                                    <span class="text-purple-600 hover:underline font-medium">choose files</span>
+                                </p>
+                                <p class="text-xs text-gray-400">Upload files to add to your new collection</p>
+                                <p class="text-xs text-gray-400">PDF, DOC, TXT, MD, CSV, XLS, Images, Videos supported</p>
+                            </div>
                         </div>
-                        <div class="format-category">
-                            <strong>Videos:</strong> .mp4, .avi, .mov, .mkv, .wmv, .flv
-                        </div>
-                        <div class="format-category">
-                            <strong>Data:</strong> .csv, .xlsx, .xls, .db, .sqlite
+                    </div>
+
+                    <!-- Collections List -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Your Collections</h3>
+                        <div id="collectionsList" class="space-y-4">
+                            <p class="text-gray-500 text-center py-8">No collections yet</p>
                         </div>
                     </div>
                 </div>
-                
-                <div class="processing-info">
-                    <h4>What happens during import:</h4>
-                    <ul>
-                        <li>Text files are chunked and summarized</li>
-                        <li>Images are analyzed with AI vision models</li>
-                        <li>Videos have keyframes extracted and analyzed</li>
-                        <li>All content is categorized and made searchable</li>
-                    </ul>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeDirectoryModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="startDirectoryImport()">Start Import</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Import progress modal -->
-    <div class="modal" id="importProgressModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Importing Directory...</h3>
-            </div>
-            <div class="modal-body">
-                <div class="progress-info">
-                    <div class="progress-status" id="importStatus">Processing files...</div>
-                    <div class="progress-details" id="importDetails"></div>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Save to Collection Modal -->
-    <div class="modal" id="saveToCollectionModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Save Chat to Collection</h3>
-                <span class="close-btn" onclick="closeSaveToCollectionModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Choose an option:</label>
-                    <div class="save-option-buttons">
-                        <button type="button" class="btn btn-secondary" onclick="selectExistingCollection()" id="existingCollectionBtn">
-                            📂 Add to Existing Collection
-                        </button>
-                        <button type="button" class="btn btn-primary" onclick="selectNewCollection()" id="newCollectionBtn">
-                            ➕ Create New Collection
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="existing-collection-section" id="existingCollectionSection" style="display:none;">
-                    <div class="form-group">
-                        <label for="existingCollectionSelect" class="form-label">Select Collection:</label>
-                        <select class="form-input" id="existingCollectionSelect">
+
+                <!-- Validate Tab -->
+                <div id="validateContent" class="space-y-6" style="display: none;">
+                    <!-- Collection Selector -->
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Select Collection to Validate Against:
+                        </label>
+                        <select id="validationCollectionSelector" class="w-full p-2 border border-gray-300 rounded-md text-sm bg-white">
                             <option value="">Choose a collection...</option>
                         </select>
                     </div>
-                </div>
-                
-                <div class="new-collection-section" id="newCollectionSection" style="display:none;">
-                    <div class="form-group">
-                        <label for="newCollectionNameInput" class="form-label">Collection Name:</label>
-                        <input type="text" class="form-input" id="newCollectionNameInput" placeholder="Enter collection name...">
+
+                    <!-- Draft Input -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Paste your draft here...
+                        </label>
+                        <textarea
+                            id="draftText"
+                            placeholder="Enter your text to validate against the selected collection..."
+                            class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                            rows="8"
+                        ></textarea>
+
+                        <button
+                            onclick="handleValidate()"
+                            class="mt-3 px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                        >
+                            Validate against Selected Collection
+                        </button>
+                    </div>
+
+                    <!-- Validation Results -->
+                    <div id="validationResults" style="display: none;">
+                        <h4 class="font-medium text-gray-900 mb-3">Validation Findings</h4>
+                        <div id="validationFindings" class="space-y-4">
+                            <!-- Validation findings will be inserted here -->
+                        </div>
+
+                        <!-- Export Area -->
+                        <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                            <h5 class="font-medium text-gray-900 mb-2">Export</h5>
+                            <div class="flex space-x-2">
+                                <button
+                                    onclick="copyDraftText()"
+                                    class="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 transition-colors"
+                                >
+                                    Copy corrected draft
+                                </button>
+                                <button
+                                    onclick="copyCitations()"
+                                    class="px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 transition-colors"
+                                >
+                                    Copy citations
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="save-info">
-                    <p><strong>What will be saved:</strong></p>
-                    <ul>
-                        <li>Complete conversation history with all messages</li>
-                        <li>Timestamps and verification status</li>
-                        <li>Agent and collection context used</li>
-                        <li>Searchable content for future reference</li>
-                    </ul>
+
+                <!-- History Tab -->
+                <div id="historyContent" class="space-y-6" style="display: none;">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Conversation History</h3>
+                        <div id="conversationsList" class="space-y-3">
+                            <p class="text-gray-500 text-center py-8">No conversations yet</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Quick Actions</h3>
+                        <div class="space-y-2">
+                            <button
+                                onclick="app.startNewConversation()"
+                                class="w-full px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition-colors"
+                            >
+                                Start New Conversation
+                            </button>
+                            <button
+                                onclick="app.clearChatHistory()"
+                                class="w-full px-4 py-2 bg-gray-600 text-white rounded-md text-sm hover:bg-gray-700 transition-colors"
+                            >
+                                Clear Chat History
+                            </button>
+                            <button
+                                onclick="app.exportConversations()"
+                                class="w-full px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 transition-colors"
+                            >
+                                Export Conversations
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeSaveToCollectionModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveChatToCollection()" id="saveConfirmBtn" disabled>Save Chat</button>
             </div>
         </div>
     </div>
 
-    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <!-- Hidden file input for uploads -->
+    <input type="file" id="fileInput" multiple style="display: none;" accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.xls,.jpg,.jpeg,.png,.gif,.mp4,.avi,.mov,.mp3,.wav,.zip,.rar">
+
+    <!-- Scripts -->
+    <script src="static/js/app.js"></script>
 </body>
 </html>

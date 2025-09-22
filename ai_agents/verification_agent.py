@@ -204,8 +204,9 @@ Be critical in your evaluation - only verify responses that are genuinely accura
                                       n_results: int = 10) -> List[Dict[str, Any]]:
         """Search for similar images by uploading an image."""
         try:
-            # Get CLIP embedding for the uploaded image
-            query_embedding = self.document_processor.get_image_embedding(uploaded_image_path)
+            # DISABLED: CLIP functionality commented out
+            # query_embedding = self.document_processor.get_image_embedding(uploaded_image_path)
+            query_embedding = None  # CLIP disabled
             if query_embedding is None:
                 return []
             
@@ -223,11 +224,11 @@ Be critical in your evaluation - only verify responses that are genuinely accura
             return []
     
     def generate_image_caption(self, image_path: str) -> str:
-        """Generate a text caption for an image using CLIP."""
+        """Generate a text caption for an image using CLIP (DISABLED)."""
         try:
-            # Use the document processor to get image description
-            # This leverages the existing CLIP integration
-            caption = self.document_processor.get_image_description(image_path)
+            # DISABLED: CLIP functionality commented out
+            # caption = self.document_processor.get_image_description(image_path)
+            caption = f"Image caption generation disabled (CLIP not available)"
             
             # If no caption generated, return a default
             if not caption or caption.strip() == "":
@@ -259,26 +260,26 @@ Be critical in your evaluation - only verify responses that are genuinely accura
                 n_results=n_results
             )
             
-            # If we have text queries that could work with CLIP, try CLIP text search
-            if not results or len(results) < n_results:
-                try:
-                    # Get CLIP text embedding for the query
-                    text_embedding = self.document_processor.get_text_embedding_for_image_search(query)
-                    if text_embedding is not None:
-                        clip_results = self.vector_store.search_similar_images_by_embedding(
-                            collection_name, 
-                            text_embedding,
-                            n_results=n_results
-                        )
-                        # Merge results, avoiding duplicates
-                        existing_paths = {r['metadata'].get('file_path') for r in results}
-                        for clip_result in clip_results:
-                            if clip_result['metadata'].get('file_path') not in existing_paths:
-                                results.append(clip_result)
-                                if len(results) >= n_results:
-                                    break
-                except Exception as clip_e:
-                    print(f"CLIP search failed: {clip_e}")
+            # DISABLED: CLIP text search functionality commented out
+            # if not results or len(results) < n_results:
+            #     try:
+            #         # Get CLIP text embedding for the query
+            #         text_embedding = self.document_processor.get_text_embedding_for_image_search(query)
+            #         if text_embedding is not None:
+            #             clip_results = self.vector_store.search_similar_images_by_embedding(
+            #                 collection_name,
+            #                 text_embedding,
+            #                 n_results=n_results
+            #             )
+            #             # Merge results, avoiding duplicates
+            #             existing_paths = {r['metadata'].get('file_path') for r in results}
+            #             for clip_result in clip_results:
+            #                 if clip_result['metadata'].get('file_path') not in existing_paths:
+            #                     results.append(clip_result)
+            #                     if len(results) >= n_results:
+            #                         break
+            #     except Exception as clip_e:
+            #         print(f"CLIP search failed: {clip_e}")
             
             return results[:n_results]
             

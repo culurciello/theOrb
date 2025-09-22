@@ -3,8 +3,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-import clip
-from PIL import Image
+# import clip  # DISABLED: CLIP functionality commented out
+# from PIL import Image  # DISABLED: PIL functionality commented out
 from .image_pipeline import ImagePipeline
 
 class VideoPipeline(ImagePipeline):
@@ -189,50 +189,15 @@ class VideoPipeline(ImagePipeline):
             return []
     
     def generate_frame_caption(self, frame: np.ndarray, timestamp: float) -> str:
-        """Generate caption for a video frame."""
+        """Generate caption for a video frame (DISABLED)."""
+        # DISABLED: PIL and CLIP functionality commented out
         try:
-            # Convert numpy array to PIL Image
-            pil_image = Image.fromarray(frame)
-            
-            # Use CLIP to generate description
-            image_tensor = self.clip_preprocess(pil_image).unsqueeze(0).to(self.device)
-            
-            # Video-specific text queries
-            text_queries = [
-                "people in a meeting or conference",
-                "a presentation being given",
-                "someone speaking or talking",
-                "a workspace or office setting", 
-                "a screen recording or tutorial",
-                "people collaborating or working",
-                "a video call or remote meeting",
-                "someone demonstrating something",
-                "a lecture or educational content",
-                "people in a discussion"
-            ]
-            
-            text_tokens = clip.tokenize(text_queries).to(self.device)
-            
-            with torch.no_grad():
-                image_features = self.clip_model.encode_image(image_tensor)
-                text_features = self.clip_model.encode_text(text_tokens)
-                
-                similarities = (image_features @ text_features.T).softmax(dim=-1)
-                best_match_idx = similarities.argmax().item()
-                best_description = text_queries[best_match_idx]
-                confidence = float(similarities.max())
-            
-            # Create timestamped caption
+            # Return simple fallback caption
+            # Create timestamped caption without CLIP/PIL
             minutes = int(timestamp // 60)
             seconds = int(timestamp % 60)
             time_str = f"{minutes}:{seconds:02d}"
-            
-            if confidence > 0.3:
-                caption = f"At {time_str}: {best_description}"
-            else:
-                caption = f"At {time_str}: video content"
-            
-            return caption
+            return f"At {time_str}: video content (multimodal processing disabled)"
             
         except Exception as e:
             print(f"Error generating frame caption: {e}")

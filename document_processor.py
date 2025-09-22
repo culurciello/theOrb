@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 import numpy as np
 import torch
-import clip
+# import clip  # DISABLED: CLIP functionality commented out
 from transformers import pipeline
 from pathlib import Path
 import mimetypes
@@ -25,7 +25,7 @@ class DocumentProcessor:
         
         
         self.supported_extensions = {
-            'text': ['.txt', '.md', '.markdown', '.pdf', '.doc', '.docx'],
+            'text': ['.txt', '.md', '.markdown', '.pdf'],  # DISABLED: .doc, .docx (docx module disabled)
             # 'image': ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif'],  # DISABLED: multimodal processing
             # 'video': ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'],  # DISABLED: multimodal processing
             'database': ['.db', '.sqlite', '.sqlite3'],
@@ -40,21 +40,22 @@ class DocumentProcessor:
             self._pipeline_processor = PipelineProcessor()
         return self._pipeline_processor
 
-    @property
-    def clip_model(self):
-        """Lazy load the CLIP model."""
-        if self._clip_model is None:
-            print("Loading CLIP model...")
-            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
-        return self._clip_model
-    
-    @property
-    def clip_preprocess(self):
-        """Lazy load the CLIP preprocessor."""
-        if self._clip_preprocess is None:
-            print("Loading CLIP model...")
-            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
-        return self._clip_preprocess
+    # DISABLED: CLIP functionality commented out
+    # @property
+    # def clip_model(self):
+    #     """Lazy load the CLIP model."""
+    #     if self._clip_model is None:
+    #         print("Loading CLIP model...")
+    #         self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+    #     return self._clip_model
+    #
+    # @property
+    # def clip_preprocess(self):
+    #     """Lazy load the CLIP preprocessor."""
+    #     if self._clip_preprocess is None:
+    #         print("Loading CLIP model...")
+    #         self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+    #     return self._clip_preprocess
 
     @property
     def summarizer(self):
@@ -213,28 +214,29 @@ class DocumentProcessor:
         all_captions = captions_v1 + captions_v2
         return '. '.join(all_captions) if all_captions else f"Video: {Path(result['link_to_original_file']).stem}"
 
+    # DISABLED: CLIP functionality commented out
     # Legacy methods for backward compatibility
-    def get_image_embedding(self, image_path: str) -> np.ndarray:
-        """Extract CLIP embedding from an image."""
-        return self.pipeline_processor.image_pipeline.get_image_embedding(image_path)
-    
-    def get_image_description(self, image_path: str) -> str:
-        """Generate a text description for an image using CLIP."""
-        return self.pipeline_processor.image_pipeline.generate_caption(image_path)
-
-    def get_text_embedding_for_image_search(self, text: str) -> np.ndarray:
-        """Extract CLIP text embedding for image search."""
-        try:
-            text_tokens = clip.tokenize([text]).to(self.device)
-            
-            with torch.no_grad():
-                text_features = self.clip_model.encode_text(text_tokens)
-                text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-                
-            return text_features.cpu().numpy().flatten()
-        except Exception as e:
-            print(f"Error extracting text embedding: {e}")
-            return None
+    # def get_image_embedding(self, image_path: str) -> np.ndarray:
+    #     """Extract CLIP embedding from an image."""
+    #     return self.pipeline_processor.image_pipeline.get_image_embedding(image_path)
+    #
+    # def get_image_description(self, image_path: str) -> str:
+    #     """Generate a text description for an image using CLIP."""
+    #     return self.pipeline_processor.image_pipeline.generate_caption(image_path)
+    #
+    # def get_text_embedding_for_image_search(self, text: str) -> np.ndarray:
+    #     """Extract CLIP text embedding for image search."""
+    #     try:
+    #         text_tokens = clip.tokenize([text]).to(self.device)
+    #
+    #         with torch.no_grad():
+    #             text_features = self.clip_model.encode_text(text_tokens)
+    #             text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+    #
+    #         return text_features.cpu().numpy().flatten()
+    #     except Exception as e:
+    #         print(f"Error extracting text embedding: {e}")
+    #         return None
     
     def _determine_file_type(self, file_ext: str) -> str:
         """Determine the file type based on extension."""

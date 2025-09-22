@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 from pathlib import Path
 import PyPDF2
-import docx
+# import docx  # DISABLED: docx functionality commented out (no .docx files in use)
 import markdown
 import re
 from transformers import pipeline
@@ -103,7 +103,9 @@ class TextPipeline(BasePipeline):
             if file_ext == '.pdf':
                 return self._extract_from_pdf(file_path)
             elif file_ext in ['.doc', '.docx']:
-                return self._extract_from_docx(file_path)
+                # DISABLED: docx functionality commented out
+                raise ValueError(f"Word document processing disabled: {file_ext}")
+                # return self._extract_from_docx(file_path)
             elif file_ext == '.txt':
                 return self._extract_from_txt(file_path)
             elif file_ext in ['.md', '.markdown']:
@@ -134,13 +136,14 @@ class TextPipeline(BasePipeline):
                 text += page.extract_text() + "\n"
         return text.strip()
 
-    def _extract_from_docx(self, file_path: Path) -> str:
-        """Extract text from DOCX file."""
-        doc = docx.Document(file_path)
-        text = ""
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
-        return text.strip()
+    # DISABLED: docx functionality commented out
+    # def _extract_from_docx(self, file_path: Path) -> str:
+    #     """Extract text from DOCX file."""
+    #     doc = docx.Document(file_path)
+    #     text = ""
+    #     for paragraph in doc.paragraphs:
+    #         text += paragraph.text + "\n"
+    #     return text.strip()
 
     def _extract_from_txt(self, file_path: Path) -> str:
         """Extract text from TXT file with automatic encoding detection."""

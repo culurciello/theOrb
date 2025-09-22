@@ -35,7 +35,7 @@ class DocumentProcessor:
         
         # File type mappings
         self.file_type_mapping = {
-            'text': ['.txt', '.md', '.markdown', '.doc', '.docx'],
+            'text': ['.txt', '.md', '.markdown'],  # DISABLED: .doc, .docx (docx module disabled)
             'pdf': ['.pdf'],
             'image': ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif', '.webp'],
             'video': ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm'],

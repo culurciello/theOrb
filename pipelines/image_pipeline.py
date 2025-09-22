@@ -1,8 +1,8 @@
 from typing import Dict, Any
 from pathlib import Path
 import torch
-import clip
-from PIL import Image
+# import clip  # DISABLED: CLIP functionality commented out
+# from PIL import Image  # DISABLED: PIL functionality commented out
 import numpy as np
 from .base_pipeline import BasePipeline
 
@@ -19,21 +19,22 @@ class ImagePipeline(BasePipeline):
         self._clip_model = None
         self._clip_preprocess = None
     
-    @property
-    def clip_model(self):
-        """Lazy load the CLIP model."""
-        if self._clip_model is None:
-            print("Loading CLIP model for ImagePipeline...")
-            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
-        return self._clip_model
-    
-    @property  
-    def clip_preprocess(self):
-        """Lazy load the CLIP preprocessor."""
-        if self._clip_preprocess is None:
-            print("Loading CLIP model for ImagePipeline...")
-            self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
-        return self._clip_preprocess
+    # DISABLED: CLIP functionality commented out
+    # @property
+    # def clip_model(self):
+    #     """Lazy load the CLIP model."""
+    #     if self._clip_model is None:
+    #         print("Loading CLIP model for ImagePipeline...")
+    #         self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+    #     return self._clip_model
+    #
+    # @property
+    # def clip_preprocess(self):
+    #     """Lazy load the CLIP preprocessor."""
+    #     if self._clip_preprocess is None:
+    #         print("Loading CLIP model for ImagePipeline...")
+    #         self._clip_model, self._clip_preprocess = clip.load("ViT-B/32", device=self.device)
+    #     return self._clip_preprocess
     
     def process(self, file_path: str) -> Dict[str, Any]:
         """Process image file according to the pipeline specification."""
@@ -57,72 +58,34 @@ class ImagePipeline(BasePipeline):
         }
     
     def generate_caption(self, image_path: str) -> str:
-        """Generate text caption for image using CLIP."""
+        """Generate text caption for image (CLIP disabled)."""
+        # DISABLED: CLIP functionality commented out - using simple fallback
         try:
-            image = Image.open(image_path)
-            image_tensor = self.clip_preprocess(image).unsqueeze(0).to(self.device)
-            
-            # Descriptive text queries for better captions
-            text_queries = [
-                "a photo of people in a meeting",
-                "a screenshot of a document", 
-                "a diagram showing information",
-                "a chart or graph with data",
-                "a personal photograph",
-                "work-related content",
-                "a presentation slide",
-                "handwritten notes",
-                "a drawing or artwork",
-                "a landscape or outdoor scene",
-                "an indoor scene with people",
-                "text document or page",
-                "data visualization",
-                "office or workplace setting"
-            ]
-            
-            text_tokens = clip.tokenize(text_queries).to(self.device)
-            
-            with torch.no_grad():
-                image_features = self.clip_model.encode_image(image_tensor)
-                text_features = self.clip_model.encode_text(text_tokens)
-                
-                similarities = (image_features @ text_features.T).softmax(dim=-1)
-                best_match_idx = similarities.argmax().item()
-                best_description = text_queries[best_match_idx]
-                confidence = float(similarities.max())
-                
-            # Generate natural caption
             filename_stem = Path(image_path).stem
-            if confidence > 0.3:
-                caption = f"Image '{filename_stem}': {best_description}"
+            file_ext = Path(image_path).suffix.lower()
+
+            # Simple caption based on file extension and name
+            if file_ext in ['.png', '.jpg', '.jpeg']:
+                return f"Image '{filename_stem}': visual content (CLIP disabled)"
             else:
-                caption = f"Image '{filename_stem}': an image with visual content"
-                
-            return caption
-            
+                return f"Image '{filename_stem}': image file (CLIP disabled)"
+
         except Exception as e:
             print(f"Error generating caption for {image_path}: {e}")
             return f"Image: {Path(image_path).stem}"
     
     def get_image_dimensions(self, image_path: str) -> str:
-        """Get image dimensions as a string."""
+        """Get image dimensions as a string (PIL disabled)."""
+        # DISABLED: PIL functionality commented out
         try:
-            with Image.open(image_path) as img:
-                return f"{img.width}x{img.height}"
+            # with Image.open(image_path) as img:
+            #     return f"{img.width}x{img.height}"
+            return "unknown (PIL disabled)"
         except Exception:
             return "unknown"
     
     def get_image_embedding(self, image_path: str) -> np.ndarray:
-        """Extract CLIP embedding from an image for similarity search."""
-        try:
-            image = Image.open(image_path)
-            image_tensor = self.clip_preprocess(image).unsqueeze(0).to(self.device)
-            
-            with torch.no_grad():
-                image_features = self.clip_model.encode_image(image_tensor)
-                image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-                
-            return image_features.cpu().numpy().flatten()
-        except Exception as e:
-            print(f"Error extracting image embedding: {e}")
-            return None
+        """Extract CLIP embedding from an image for similarity search (DISABLED)."""
+        # DISABLED: CLIP functionality commented out
+        print(f"Warning: CLIP image embedding disabled for {image_path}")
+        return None
