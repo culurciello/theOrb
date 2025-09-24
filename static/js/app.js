@@ -12,10 +12,23 @@ class OrvinApp {
             selectedLLMId: null,
             activeTab: 'collections',
             currentTheme: localStorage.getItem('orb-theme') || 'light',
-            validationFindings: [],
-            selectedValidationCollection: null,
-            draftText: '',
-            pendingFiles: null
+            pendingFiles: null,
+            expandedCollections: new Set(),
+            collectionFiles: {},
+            userSettings: {
+                profile: {
+                    firstName: '',
+                    lastName: '',
+                    email: ''
+                },
+                apiKeys: {
+                    openai: '',
+                    anthropic: ''
+                },
+                defaultModel: 'gpt-4',
+                maxTokens: 4000,
+                temperature: 0.7
+            }
         };
 
         this.init();
@@ -92,7 +105,8 @@ class OrvinApp {
                 this.loadCollections(),
                 this.loadAvailableAgents(),
                 this.loadAvailableLLMs(),
-                this.loadConversations()
+                this.loadConversations(),
+                this.loadSettings()
             ]);
 
             this.updateSelectors();
@@ -110,7 +124,6 @@ class OrvinApp {
             const collections = await response.json();
             this.state.collections = collections;
             this.updateActiveCollectionSelector();
-            this.updateValidationCollectionSelector();
             return collections;
         } catch (error) {
             console.error('Error loading collections:', error);
@@ -301,11 +314,6 @@ class OrvinApp {
                 ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
                 : 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
 
-        document.getElementById('validateTab').className =
-            tabName === 'validate'
-                ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
-                : 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
-
         document.getElementById('historyTab').className =
             tabName === 'history'
                 ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
@@ -314,8 +322,6 @@ class OrvinApp {
         // Show/hide content
         document.getElementById('collectionsContent').style.display =
             tabName === 'collections' ? 'block' : 'none';
-        document.getElementById('validateContent').style.display =
-            tabName === 'validate' ? 'block' : 'none';
         document.getElementById('historyContent').style.display =
             tabName === 'history' ? 'block' : 'none';
 
@@ -329,7 +335,6 @@ class OrvinApp {
         this.updateActiveCollectionSelector();
         this.updateAgentSelector();
         this.updateLLMSelector();
-        this.updateValidationCollectionSelector();
     }
 
     updateActiveCollectionSelector() {
@@ -379,15 +384,6 @@ class OrvinApp {
         }
     }
 
-    updateValidationCollectionSelector() {
-        const selector = document.getElementById('validationCollectionSelector');
-        if (!selector) return;
-
-        selector.innerHTML = '<option value="">Choose a collection...</option>' +
-            this.state.collections.map(collection =>
-                `<option value="${collection.id}">${collection.name} (${collection.document_count || 0} documents)</option>`
-            ).join('');
-    }
 
     renderCollections() {
         const container = document.getElementById('collectionsList');
@@ -402,11 +398,51 @@ class OrvinApp {
             const docCount = collection.document_count || collection.docCount || 0;
             const updatedAt = collection.updated_at || collection.updatedAt || collection.created_at;
             const formattedDate = updatedAt ? new Date(updatedAt).toLocaleDateString() : 'Recently';
+            const isExpanded = this.state.expandedCollections.has(collection.id);
+            const files = this.state.collectionFiles[collection.id] || [];
+
+            // Generate files list HTML
+            const filesListHTML = isExpanded ? `
+                <div class="mt-3 border-t border-gray-200 pt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <h5 class="text-sm font-medium text-gray-700">Files in this collection:</h5>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-gray-500">${files.length} files</span>
+                            <button
+                                onclick="app.triggerFileUpload(${collection.id}); event.stopPropagation();"
+                                class="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
+                                title="Upload files to this collection"
+                            >
+                                + Upload
+                            </button>
+                        </div>
+                    </div>
+                    ${files.length === 0 ?
+                        '<p class="text-xs text-gray-500 italic">No files uploaded yet</p>' :
+                        `<div class="space-y-1 max-h-40 overflow-y-auto">
+                            ${files.map(file => `
+                                <div class="flex items-center justify-between py-1 px-2 bg-white rounded text-xs">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-gray-600">${this.getFileIcon(this.getFileExtension(file.filename || file.name))}</span>
+                                        <span class="text-gray-900 truncate max-w-32" title="${file.filename || file.name}">${file.filename || file.name}</span>
+                                    </div>
+                                    <span class="text-gray-500 font-mono">${this.formatFileSize(file.size || file.file_size || 0)}</span>
+                                </div>
+                            `).join('')}
+                        </div>`
+                    }
+                </div>
+            ` : '';
 
             return `
                 <div class="collection-item bg-gray-50 rounded-lg p-4" data-collection-id="${collection.id}">
                     <div class="flex items-start justify-between mb-2">
-                        <h4 class="font-medium text-gray-900">${collection.name}</h4>
+                        <h4 class="font-medium text-gray-900 cursor-pointer hover:text-purple-600 flex items-center space-x-2" onclick="app.toggleCollectionDetails(${collection.id})">
+                            <span>${collection.name}</span>
+                            <svg class="w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </h4>
                         <div class="flex items-center space-x-2">
                             <button
                                 onclick="app.setActiveCollection(${collection.id})"
@@ -434,19 +470,7 @@ class OrvinApp {
                         ${docCount} documents • Updated ${formattedDate}
                     </p>
 
-                    <!-- Upload Area -->
-                    <div onclick="app.triggerFileUpload(${collection.id})" class="upload-area border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer">
-                        <div class="flex flex-col items-center space-y-2">
-                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            <p class="text-sm text-gray-500">
-                                Drop files here or
-                                <span class="text-purple-600 hover:underline">choose files</span>
-                            </p>
-                            <p class="text-xs text-gray-400">PDF, DOC, TXT, MD supported</p>
-                        </div>
-                    </div>
+                    ${filesListHTML}
                 </div>
             `;
         }).join('');
@@ -603,6 +627,9 @@ class OrvinApp {
             const successCount = await this.uploadFilesToCollection(collectionId, files);
 
             if (successCount > 0) {
+                // Clear cached files for this collection to force refresh
+                delete this.state.collectionFiles[collectionId];
+
                 await this.loadCollections();
                 this.renderCollections();
                 this.updateSelectors();
@@ -661,6 +688,68 @@ class OrvinApp {
         `;
     }
 
+    showUploadArea() {
+        const uploadArea = document.getElementById('newCollectionUploadArea');
+        if (uploadArea) {
+            uploadArea.style.display = 'block';
+        }
+    }
+
+    hideUploadArea() {
+        const uploadArea = document.getElementById('newCollectionUploadArea');
+        if (uploadArea) {
+            uploadArea.style.display = 'none';
+        }
+    }
+
+    async toggleCollectionDetails(collectionId) {
+        const isExpanded = this.state.expandedCollections.has(collectionId);
+
+        if (isExpanded) {
+            // Collapse
+            this.state.expandedCollections.delete(collectionId);
+        } else {
+            // Expand and load files if not already loaded
+            this.state.expandedCollections.add(collectionId);
+            if (!this.state.collectionFiles[collectionId]) {
+                try {
+                    const files = await this.loadCollectionDocuments(collectionId);
+                    this.state.collectionFiles[collectionId] = files;
+                } catch (error) {
+                    console.error('Error loading collection files:', error);
+                    this.state.collectionFiles[collectionId] = [];
+                }
+            }
+        }
+
+        // Re-render collections to show/hide details
+        this.renderCollections();
+    }
+
+    formatFileSize(bytes) {
+        if (!bytes || bytes === 0) return '0 B';
+
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(1024));
+        const size = bytes / Math.pow(1024, i);
+
+        return `${size.toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`;
+    }
+
+    handleCreateCollectionClick() {
+        const nameInput = document.getElementById('newCollectionName');
+        const name = nameInput.value.trim();
+
+        if (!name) {
+            // If no name is provided, show the upload area to prompt user
+            this.showUploadArea();
+            return;
+        }
+
+        // If name is provided, proceed with creation
+        this.handleCreateCollection();
+    }
+
     async handleCreateCollection() {
         const nameInput = document.getElementById('newCollectionName');
         const name = nameInput.value.trim();
@@ -702,148 +791,15 @@ class OrvinApp {
                 this.state.pendingFiles = null;
                 this.resetNewCollectionUploadArea();
             }
+
+            // Hide upload area after successful creation
+            this.hideUploadArea();
         } catch (error) {
             console.error('Error creating collection:', error);
             this.showNotification(`Error creating collection: ${error.message}`, 'error');
         }
     }
 
-    // Validation Functions
-    handleValidate() {
-        const draftText = document.getElementById('draftText').value.trim();
-        const selectedCollectionId = document.getElementById('validationCollectionSelector').value;
-
-        if (!draftText || !selectedCollectionId) {
-            this.showNotification('Please enter text and select a collection', 'warning');
-            return;
-        }
-
-        const validationCollection = this.state.collections.find(c => c.id == selectedCollectionId);
-        const findings = this.mockValidate(draftText, validationCollection);
-        this.state.validationFindings = findings;
-        this.renderValidationResults();
-    }
-
-    mockValidate(text, activeCollection) {
-        if (!text.trim() || !activeCollection) return [];
-
-        const sentences = text.split('.').filter(s => s.trim().length > 10);
-        if (sentences.length === 0) return [];
-
-        const findings = [];
-        const issueTypes = ['Needs Citation', 'Likely Misquote', 'Outdated Reference'];
-        const selectedSentences = sentences.sort(() => 0.5 - Math.random()).slice(0, Math.min(3, sentences.length));
-
-        selectedSentences.forEach((sentence, idx) => {
-            const type = issueTypes[idx % issueTypes.length];
-            const mockSources = [
-                `Document_${Math.floor(Math.random() * 100)}.pdf`,
-                `Reference_${Math.floor(Math.random() * 50)}.docx`
-            ];
-
-            findings.push({
-                id: Date.now() + idx,
-                type,
-                excerpt: sentence.trim() + '.',
-                suggestion: type === 'Likely Misquote' ? 'Consider revising this statement' : 'Add supporting documentation',
-                sources: mockSources
-            });
-        });
-
-        return findings;
-    }
-
-    renderValidationResults() {
-        const resultsContainer = document.getElementById('validationResults');
-        const findingsContainer = document.getElementById('validationFindings');
-
-        if (this.state.validationFindings.length === 0) {
-            resultsContainer.style.display = 'none';
-            return;
-        }
-
-        resultsContainer.style.display = 'block';
-        findingsContainer.innerHTML = this.state.validationFindings.map(finding => `
-            <div class="border border-gray-200 rounded-lg p-4">
-                <div class="flex items-start space-x-3 mb-3">
-                    <span class="px-2 py-1 rounded text-xs font-medium ${
-                        finding.type === 'Needs Citation' ? 'bg-blue-100 text-blue-800' :
-                        finding.type === 'Likely Misquote' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                    }">
-                        ${finding.type}
-                    </span>
-                </div>
-
-                <p class="text-sm text-gray-900 bg-yellow-50 p-2 rounded mb-3">
-                    "${finding.excerpt}"
-                </p>
-
-                <div class="space-y-2">
-                    <div class="flex items-center space-x-2">
-                        <select class="flex-1 text-sm border border-gray-300 rounded p-1">
-                            ${finding.sources.map(source => `<option>${source}</option>`).join('')}
-                        </select>
-                        <button
-                            onclick="app.insertCitation('${finding.id}', '${finding.sources[0]}')"
-                            class="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700 transition-colors"
-                        >
-                            Insert citation
-                        </button>
-                    </div>
-
-                    <button
-                        onclick="app.fixSuggestion('${finding.id}')"
-                        class="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
-                    >
-                        Fix suggestion
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    insertCitation(findingId, source) {
-        const page = Math.floor(Math.random() * 50) + 1;
-        const citation = `[source: ${source} p.${page}]`;
-        const draftTextArea = document.getElementById('draftText');
-        draftTextArea.value += ' ' + citation;
-        this.showNotification('Citation inserted', 'success');
-    }
-
-    fixSuggestion(findingId) {
-        const finding = this.state.validationFindings.find(f => f.id == findingId);
-        if (!finding) return;
-
-        const fixes = {
-            'Needs Citation': (text) => text.replace(/\.$/, ' (as established in legal precedent).'),
-            'Likely Misquote': (text) => text.replace(/\b(always|never|all|none)\b/g, 'typically'),
-            'Outdated Reference': (text) => text.replace(/\b\d{4}\b/, '2024')
-        };
-
-        const fixFunction = fixes[finding.type];
-        if (fixFunction) {
-            const draftTextArea = document.getElementById('draftText');
-            const newExcerpt = fixFunction(finding.excerpt);
-            draftTextArea.value = draftTextArea.value.replace(finding.excerpt, newExcerpt);
-            this.showNotification('Suggestion applied', 'success');
-        }
-    }
-
-    copyDraftText() {
-        const draftText = document.getElementById('draftText').value;
-        navigator.clipboard.writeText(draftText).then(() => {
-            this.showNotification('Draft text copied to clipboard', 'success');
-        });
-    }
-
-    copyCitations() {
-        const draftText = document.getElementById('draftText').value;
-        const citations = draftText.match(/\[source:[^\]]+\]/g) || [];
-        navigator.clipboard.writeText(citations.join('\n')).then(() => {
-            this.showNotification('Citations copied to clipboard', 'success');
-        });
-    }
 
     // Conversation History Functions
     renderConversationHistory() {
@@ -1016,6 +972,118 @@ class OrvinApp {
         this.showNotification('Conversations exported successfully', 'success');
     }
 
+    // Settings Functions
+    async loadSettings() {
+        try {
+            const response = await fetch('/api/settings');
+            if (response.ok) {
+                const settings = await response.json();
+                this.state.userSettings = { ...this.state.userSettings, ...settings };
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+    }
+
+    async saveSettings() {
+        try {
+            const settings = this.state.userSettings;
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+
+            if (response.ok) {
+                this.showNotification('Settings saved successfully', 'success');
+                this.closeSettingsModal();
+            } else {
+                throw new Error('Failed to save settings');
+            }
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            this.showNotification('Error saving settings', 'error');
+        }
+    }
+
+    openSettingsModal() {
+        // Load current settings into the modal
+        this.populateSettingsModal();
+        const modal = document.getElementById('settingsModal');
+        modal.style.display = 'flex';
+
+        // Add click outside to close functionality
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                this.closeSettingsModal();
+            }
+        };
+    }
+
+    closeSettingsModal() {
+        document.getElementById('settingsModal').style.display = 'none';
+    }
+
+    populateSettingsModal() {
+        const settings = this.state.userSettings;
+
+        // Populate user profile
+        document.getElementById('firstName').value = settings.profile?.firstName || '';
+        document.getElementById('lastName').value = settings.profile?.lastName || '';
+        document.getElementById('email').value = settings.profile?.email || '';
+
+        // Populate API keys
+        document.getElementById('openaiApiKey').value = settings.apiKeys?.openai || '';
+        document.getElementById('anthropicApiKey').value = settings.apiKeys?.anthropic || '';
+
+        // Populate general settings
+        document.getElementById('defaultModel').value = settings.defaultModel || 'gpt-4';
+        document.getElementById('maxTokens').value = settings.maxTokens || 4000;
+        document.getElementById('temperature').value = settings.temperature || 0.7;
+        document.getElementById('temperatureValue').textContent = settings.temperature || 0.7;
+    }
+
+    collectSettingsFromModal() {
+        // Collect user profile
+        this.state.userSettings.profile = {
+            firstName: document.getElementById('firstName').value.trim(),
+            lastName: document.getElementById('lastName').value.trim(),
+            email: document.getElementById('email').value.trim()
+        };
+
+        // Collect API keys
+        this.state.userSettings.apiKeys = {
+            openai: document.getElementById('openaiApiKey').value.trim(),
+            anthropic: document.getElementById('anthropicApiKey').value.trim()
+        };
+
+        // Collect general settings
+        this.state.userSettings.defaultModel = document.getElementById('defaultModel').value;
+        this.state.userSettings.maxTokens = parseInt(document.getElementById('maxTokens').value) || 4000;
+        this.state.userSettings.temperature = parseFloat(document.getElementById('temperature').value) || 0.7;
+    }
+
+    handleSaveSettings() {
+        this.collectSettingsFromModal();
+        this.saveSettings();
+    }
+
+    togglePasswordVisibility(inputId) {
+        const input = document.getElementById(inputId);
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+
+        // Update the eye icon (optional - we can add this later)
+    }
+
+    updateTemperatureDisplay() {
+        const temperatureInput = document.getElementById('temperature');
+        const temperatureValue = document.getElementById('temperatureValue');
+        if (temperatureInput && temperatureValue) {
+            temperatureValue.textContent = temperatureInput.value;
+        }
+    }
+
     // Enhanced file handling with progress
     async handleFileUploadWithProgress(files, collectionId) {
         const collection = this.state.collections.find(c => c.id === collectionId);
@@ -1049,6 +1117,9 @@ class OrvinApp {
             this.closeProgressNotification(progressNotification);
 
             if (successCount > 0) {
+                // Clear cached files for this collection to force refresh
+                delete this.state.collectionFiles[collectionId];
+
                 await this.loadCollections();
                 this.renderCollections();
                 this.updateSelectors();
@@ -1165,6 +1236,13 @@ class OrvinApp {
                 this.state.selectedLLMId = e.target.value || null;
             });
         }
+
+        // Settings modal temperature slider
+        document.addEventListener('input', (e) => {
+            if (e.target.id === 'temperature') {
+                this.updateTemperatureDisplay();
+            }
+        });
     }
 
     setupDragAndDrop() {
@@ -1181,8 +1259,18 @@ class OrvinApp {
             const files = Array.from(e.dataTransfer.files);
             if (files.length === 0) return;
 
-            // If we have an active collection, upload to it
-            if (this.state.activeCollectionId) {
+            // Check if dropped on a specific collection
+            const collectionItem = e.target.closest('.collection-item');
+            let targetCollectionId = null;
+
+            if (collectionItem) {
+                targetCollectionId = parseInt(collectionItem.getAttribute('data-collection-id'));
+            }
+
+            // Use target collection, or active collection, or prepare for new collection
+            if (targetCollectionId) {
+                await this.handleFileUpload(files, targetCollectionId);
+            } else if (this.state.activeCollectionId) {
                 await this.handleFileUpload(files, this.state.activeCollectionId);
             } else {
                 // Otherwise, prepare for new collection
@@ -1210,8 +1298,11 @@ window.app = app;
 window.toggleTheme = () => app.toggleTheme();
 window.setActiveTab = (tab) => app.setActiveTab(tab);
 window.handleCreateCollection = () => app.handleCreateCollection();
+window.handleCreateCollectionClick = () => app.handleCreateCollectionClick();
 window.handleSendMessage = () => app.handleSendMessage();
 window.triggerFileUploadForNewCollection = () => app.triggerFileUploadForNewCollection();
-window.handleValidate = () => app.handleValidate();
-window.copyDraftText = () => app.copyDraftText();
-window.copyCitations = () => app.copyCitations();
+window.toggleCollectionDetails = (id) => app.toggleCollectionDetails(id);
+window.openSettingsModal = () => app.openSettingsModal();
+window.closeSettingsModal = () => app.closeSettingsModal();
+window.saveSettings = () => app.handleSaveSettings();
+window.togglePasswordVisibility = (id) => app.togglePasswordVisibility(id);
