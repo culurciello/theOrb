@@ -415,6 +415,7 @@ def chat():
             # Normal chat message - use agent manager
             # Get context from collection if specified
             context = ""
+            document_references = []
             if collection_name:
                 relevant_chunks = vector_store.search_similar_chunks(
                     collection_name, user_message, n_results=3
@@ -422,7 +423,32 @@ def chat():
                 if relevant_chunks:
                     context = "\n\n--- Relevant Information ---\n"
                     for i, chunk in enumerate(relevant_chunks):
-                        context += f"Document {i+1}:\n{chunk['content']}\n\n"
+                        # Get document info for this chunk
+                        try:
+                            # Find document by file path in metadata
+                            file_path = chunk['metadata'].get('file_path', '')
+                            collection = Collection.query.filter_by(name=collection_name).first()
+                            if collection:
+                                document = Document.query.filter_by(
+                                    collection_id=collection.id,
+                                    file_path=file_path
+                                ).first()
+
+                                if document:
+                                    chunk_order = chunk['metadata'].get('chunk_order', 0)
+                                    document_references.append({
+                                        'document_id': document.id,
+                                        'filename': document.filename,
+                                        'chunk_order': chunk_order,
+                                        'file_path': file_path
+                                    })
+                                    context += f"Document {i+1} ({document.filename}, paragraph {chunk_order + 1}):\n{chunk['content']}\n\n"
+                                else:
+                                    context += f"Document {i+1}:\n{chunk['content']}\n\n"
+                            else:
+                                context += f"Document {i+1}:\n{chunk['content']}\n\n"
+                        except Exception:
+                            context += f"Document {i+1}:\n{chunk['content']}\n\n"
 
             # Auto-detect agent if not specified
             if not agent_id:
@@ -434,7 +460,8 @@ def chat():
                 agent_name=agent_id,
                 context=context,
                 conversation_history=conversation_history,
-                collection_name=collection_name
+                collection_name=collection_name,
+                document_references=document_references
             )
             response_text = response_data['response']
             verified = response_data.get('verified')
@@ -473,7 +500,8 @@ def chat():
             'conversation_id': conversation.id,
             'response': response_text,
             'verified': verified,
-            'images': images_result
+            'images': images_result,
+            'document_references': response_data.get('document_references', [])
         })
     
     except Exception as e:
@@ -575,18 +603,65 @@ def remove_file_from_collection(collection_id, document_id):
 
 @bp.route('/api/documents/<int:document_id>', methods=['GET'])
 def get_document(document_id):
-    """Get a specific document with full content."""
+    """Get a specific document with full content and optional paragraph highlighting."""
     document = Document.query.get_or_404(document_id)
-    
-    return jsonify({
+    highlight_chunk = request.args.get('highlight_chunk', type=int)
+
+    # Get chunks for this document
+    chunks = DocumentChunk.query.filter_by(document_id=document_id).order_by(DocumentChunk.chunk_index).all()
+
+    response_data = {
         'id': document.id,
         'filename': document.filename,
         'file_type': document.file_type,
         'created_at': document.created_at.isoformat(),
         'content': document.content,
         'collection_id': document.collection_id,
-        'chunk_count': len(document.chunks)
+        'chunk_count': len(document.chunks),
+        'chunks': [{'id': chunk.id, 'index': chunk.chunk_index, 'content': chunk.content} for chunk in chunks],
+        'highlight_chunk': highlight_chunk
+    }
+
+    return jsonify(response_data)
+
+@bp.route('/document-viewer')
+def document_viewer():
+    """Document viewer page."""
+    return render_template('document_viewer.html')
+
+
+# Settings Routes
+@bp.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Get user settings."""
+    # For now, return default settings
+    # In a real app, you'd load from database or user preferences
+    return jsonify({
+        'profile': {
+            'firstName': '',
+            'lastName': '',
+            'email': ''
+        },
+        'apiKeys': {
+            'openai': '',
+            'anthropic': ''
+        },
+        'defaultModel': 'gpt-4',
+        'maxTokens': 4000,
+        'temperature': 0.7
     })
+
+@bp.route('/api/settings', methods=['POST'])
+def save_settings():
+    """Save user settings."""
+    try:
+        settings = request.get_json()
+        # For now, just acknowledge the save
+        # In a real app, you'd save to database or user preferences file
+        print(f"Settings saved: {settings}")  # Debug log
+        return jsonify({'success': True, 'message': 'Settings saved successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # User Profile Routes

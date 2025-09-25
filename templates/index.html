@@ -5,11 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orvin - Collections & Chat</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="static/css/styles.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <style>
         /* Custom styles for the app */
         .message {
             animation: fadeInUp 0.3s ease-out;
+        }
+
+        /* Better formatting for chat messages */
+        .message-content p {
+            line-height: 1.5;
+        }
+
+        .message-content code {
+            background-color: rgba(0, 0, 0, 0.1);
+            color: #d63384;
+        }
+
+        .message-content li {
+            list-style: none;
+            margin-bottom: 0.25rem;
+        }
+
+        .message-content strong {
+            font-weight: 600;
+        }
+
+        .message-content em {
+            font-style: italic;
         }
 
         @keyframes fadeInUp {
@@ -535,6 +558,6 @@
     </div>
 
     <!-- Scripts -->
-    <script src="static/js/app.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

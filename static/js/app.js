@@ -507,6 +507,7 @@ class OrvinApp {
             const messageText = message.text || message.content || message.message || '';
             const messageRole = message.role || 'assistant';
             const messageCites = message.cites || message.citations || [];
+            const documentRefs = message.documentReferences || [];
 
             return `
                 <div class="message flex ${messageRole === 'user' ? 'justify-end' : 'justify-start'}">
@@ -515,13 +516,26 @@ class OrvinApp {
                             ? 'bg-purple-600 text-white'
                             : 'bg-gray-100 text-gray-800'
                     }">
-                        <p class="text-sm">${messageText}</p>
+                        <div class="text-sm message-content">${this.formatMessageContent(messageText)}</div>
                         ${messageCites && messageCites.length > 0 ? `
                             <div class="mt-2 flex flex-wrap gap-1">
                                 ${messageCites.map(cite => `
                                     <span class="px-2 py-1 bg-white bg-opacity-20 rounded text-xs cursor-pointer hover:bg-opacity-30">
                                         [doc: ${cite}]
                                     </span>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                        ${documentRefs && documentRefs.length > 0 ? `
+                            <div class="mt-2 flex flex-wrap gap-1">
+                                <span class="text-xs text-gray-600 dark:text-gray-400">Sources:</span>
+                                ${documentRefs.map(ref => `
+                                    <a href="${window.location.protocol}//${window.location.host}${window.location.pathname.includes('/mynewpage') ? '/mynewpage' : ''}/document-viewer?id=${ref.document_id}&highlight_chunk=${ref.chunk_order}"
+                                       target="_blank"
+                                       class="px-2 py-1 bg-blue-100 text-blue-800 hover:bg-blue-200 rounded text-xs cursor-pointer inline-flex items-center gap-1"
+                                       title="View ${ref.filename}, paragraph ${ref.chunk_order + 1}">
+                                        📄 ${ref.filename} (¶${ref.chunk_order + 1})
+                                    </a>
                                 `).join('')}
                             </div>
                         ` : ''}
@@ -561,7 +575,8 @@ class OrvinApp {
             const assistantMessage = {
                 role: 'assistant',
                 text: response.response || this.mockAssistantReply(messageText, activeCollection),
-                cites: response.citations || []
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
             };
             this.state.chatMessages.push(assistantMessage);
             this.renderChatMessages();
@@ -590,6 +605,48 @@ class OrvinApp {
 
         const baseReply = responses[Math.floor(Math.random() * responses.length)];
         return `${baseReply} This aligns with established practices and precedents.`;
+    }
+
+    formatMessageContent(text) {
+        if (!text) return '';
+
+        // Simple markdown-like formatting
+        let formatted = text;
+
+        // Convert double line breaks to paragraphs
+        formatted = formatted.split('\n\n').map(paragraph =>
+            paragraph.trim() ? `<p class="mb-3 last:mb-0">${this.processInlineMarkdown(paragraph.replace(/\n/g, '<br>'))}</p>` : ''
+        ).filter(p => p).join('');
+
+        // If no double line breaks, treat single line breaks as paragraphs
+        if (!formatted.includes('<p>')) {
+            formatted = formatted.split('\n').map(line =>
+                line.trim() ? `<p class="mb-2 last:mb-0">${this.processInlineMarkdown(line)}</p>` : ''
+            ).filter(p => p).join('');
+        }
+
+        return formatted || `<p>${this.processInlineMarkdown(text)}</p>`;
+    }
+
+    processInlineMarkdown(text) {
+        return text
+            // Bold text **text** or __text__
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/__(.*?)__/g, '<strong>$1</strong>')
+
+            // Italic text *text* or _text_
+            .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>')
+            .replace(/(?<!_)_([^_]+)_(?!_)/g, '<em>$1</em>')
+
+            // Code inline `code`
+            .replace(/`([^`]+)`/g, '<code class="bg-gray-200 px-1 rounded text-sm font-mono">$1</code>')
+
+            // Lists - simple detection
+            .replace(/^[\s]*[-*+]\s(.+)$/gm, '<li class="ml-4">• $1</li>')
+            .replace(/^[\s]*(\d+\.)\s(.+)$/gm, '<li class="ml-4">$1 $2</li>')
+
+            // Links [text](url)
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 hover:underline" target="_blank">$1</a>');
     }
 
     // File Upload Functions

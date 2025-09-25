@@ -52,7 +52,8 @@ class AgentManager:
     def process_request(self, user_message: str, agent_name: Optional[str] = None,
                        context: str = "", conversation_history: Optional[List[Dict[str, str]]] = None,
                        progress_callback: Optional[callable] = None,
-                       collection_name: Optional[str] = None) -> Dict[str, Any]:
+                       collection_name: Optional[str] = None,
+                       document_references: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Process a request using the specified agent."""
         agent = self.get_agent(agent_name)
         
@@ -64,11 +65,15 @@ class AgentManager:
             progress_callback=progress_callback,
             collection_name=collection_name
         )
-        
+
         # Add metadata about which agent was used
         result['agent_used'] = agent_name or self.default_agent
         result['agent_display_name'] = agent.get_agent_name()
-        
+
+        # Add document references if provided
+        if document_references:
+            result['document_references'] = document_references
+
         return result
     
     def detect_agent_from_message(self, user_message: str) -> str:

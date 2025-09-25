@@ -24,8 +24,12 @@ load_dotenv()
 #     </Directory>
 # </VirtualHost>
 
-# Create Flask app
-app = Flask(__name__)
+# Create Flask app with static URL path configuration for subpage deployment
+url_prefix = os.environ.get('URL_PREFIX', None)
+if url_prefix:
+    app = Flask(__name__, static_url_path=f'{url_prefix}/static')
+else:
+    app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///orb.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -40,7 +44,6 @@ CORS(app)
 
 # Register routes blueprint with URL prefix support
 from routes import bp
-url_prefix = os.environ.get('URL_PREFIX', None)
 # For local testing, you can comment out the next line to disable URL prefix:
 app.register_blueprint(bp, url_prefix=url_prefix)
 # For local testing without prefix, uncomment this line instead:

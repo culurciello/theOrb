@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Viewer - Orvin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .highlight-chunk {
+            background-color: #fef3c7 !important;
+            border-left: 4px solid #f59e0b !important;
+            padding-left: 1rem !important;
+            margin: 0.5rem 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="max-w-4xl mx-auto py-8 px-4">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div id="loading" class="text-center py-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-2 text-gray-600">Loading document...</p>
+            </div>
+
+            <div id="error" class="hidden text-center py-8">
+                <div class="text-red-600 text-lg mb-2">⚠️ Error</div>
+                <p class="text-gray-600">Failed to load document</p>
+            </div>
+
+            <div id="document-content" class="hidden">
+                <header class="border-b pb-4 mb-6">
+                    <h1 id="document-title" class="text-2xl font-bold text-gray-800"></h1>
+                    <p class="text-sm text-gray-600 mt-1">
+                        <span id="document-type"></span> •
+                        <span id="document-created"></span> •
+                        <span id="document-chunks"></span> chunks
+                    </p>
+                </header>
+
+                <main>
+                    <div id="document-text" class="prose max-w-none"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDocument() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const documentId = urlParams.get('id');
+            const highlightChunk = urlParams.get('highlight_chunk');
+
+            if (!documentId) {
+                showError('No document ID provided');
+                return;
+            }
+
+            try {
+                const urlPrefix = window.location.pathname.includes('/mynewpage') ? '/mynewpage' : '';
+                const response = await fetch(`${urlPrefix}/api/documents/${documentId}?highlight_chunk=${highlightChunk || ''}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch document');
+                }
+
+                const document = await response.json();
+                displayDocument(document, highlightChunk);
+            } catch (error) {
+                console.error('Error loading document:', error);
+                showError('Failed to load document');
+            }
+        }
+
+        function displayDocument(documentData, highlightChunk) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('document-content').classList.remove('hidden');
+
+            // Set header information
+            document.getElementById('document-title').textContent = documentData.filename;
+            document.getElementById('document-type').textContent = documentData.file_type.toUpperCase();
+            document.getElementById('document-created').textContent = new Date(documentData.created_at).toLocaleDateString();
+            document.getElementById('document-chunks').textContent = documentData.chunk_count;
+
+            // Display content with chunk highlighting
+            const contentDiv = document.getElementById('document-text');
+
+            if (documentData.chunks && documentData.chunks.length > 0) {
+                // Display by chunks if available
+                contentDiv.innerHTML = documentData.chunks.map((chunk, index) => {
+                    const isHighlighted = highlightChunk && parseInt(highlightChunk) === chunk.index;
+                    return `
+                        <div class="chunk ${isHighlighted ? 'highlight-chunk' : ''} mb-4 p-3 rounded border-l-2 border-gray-200"
+                             id="chunk-${chunk.index}">
+                            <div class="text-xs text-gray-500 mb-2">Paragraph ${chunk.index + 1}</div>
+                            <div class="text-gray-800 leading-relaxed">${chunk.content.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Scroll to highlighted chunk
+                if (highlightChunk) {
+                    setTimeout(() => {
+                        const element = document.getElementById(`chunk-${highlightChunk}`);
+                        if (element) {
+                            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
+                }
+            } else {
+                // Fallback to raw content
+                contentDiv.innerHTML = `<div class="text-gray-800 leading-relaxed">${documentData.content.replace(/\n/g, '<br>')}</div>`;
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.querySelector('#error p').textContent = message;
+        }
+
+        // Load document when page loads
+        window.addEventListener('DOMContentLoaded', loadDocument);
+    </script>
+</body>
+</html>
