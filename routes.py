@@ -1,4 +1,5 @@
-from flask import render_template, request, jsonify, send_file
+from flask import render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask_login import login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 import os
 import uuid
@@ -11,19 +12,116 @@ bp = Blueprint('main', __name__)
 
 # We'll register this blueprint with the app in app.py
 from database import db
-from models import Collection, Document, DocumentChunk, Conversation, Message, UserProfile, ApiKey
+from models import Collection, Document, DocumentChunk, Conversation, Message, UserProfile, ApiKey, User
 from document_processor import DocumentProcessor
 from vector_store import VectorStore
 from ai_agents import AgentManager
 from ai_agents.verification_agent import VerificationAgent
+from auth import login_required, get_current_user, get_user_collections_query, get_user_conversations_query, UserVectorStore, get_user_collection_or_404, get_user_conversation_or_404
 
 # Initialize services
-vector_store = VectorStore()
+base_vector_store = VectorStore()
+vector_store = UserVectorStore(base_vector_store)
 document_processor = DocumentProcessor()
 verification_agent = VerificationAgent()
 agent_manager = AgentManager()
 
+# Authentication routes
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login page."""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        user = User.query.filter_by(username=username).first()
+
+        if user and user.check_password(password):
+            login_user(user, remember=request.form.get('remember-me'))
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('main.index'))
+        else:
+            flash('Invalid username or password')
+
+    return render_template('login.html')
+
+@bp.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration page."""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        full_name = request.form.get('full_name')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        # Validation
+        if password != confirm_password:
+            flash('Passwords do not match')
+            return render_template('register.html')
+
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return render_template('register.html')
+
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered')
+            return render_template('register.html')
+
+        # Create new user
+        user = User(
+            username=username,
+            email=email,
+            full_name=full_name
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+
+        # Create user profile
+        profile = UserProfile(
+            user_id=user.id,
+            name=full_name.split()[0] if full_name else '',
+            lastname=' '.join(full_name.split()[1:]) if full_name and len(full_name.split()) > 1 else '',
+            email=email
+        )
+        db.session.add(profile)
+        db.session.commit()
+
+        flash('Registration successful! Please log in.')
+        return redirect(url_for('main.login'))
+
+    return render_template('register.html')
+
+@bp.route('/logout')
+def logout():
+    """User logout."""
+    logout_user()
+    return redirect(url_for('main.login'))
+
+@bp.route('/bypass-login')
+def bypass_login():
+    """Bypass login for testing (only works if BYPASS_AUTH is enabled)."""
+    from flask import current_app
+    if not current_app.config.get('BYPASS_AUTH', False):
+        flash('Authentication bypass is disabled')
+        return redirect(url_for('main.login'))
+
+    # Get or create test user
+    user = get_current_user()
+    if user:
+        login_user(user)
+        flash('Logged in as test user')
+        return redirect(url_for('main.index'))
+    else:
+        flash('Could not create test user')
+        return redirect(url_for('main.login'))
+
 @bp.route('/')
+@login_required
 def index():
     """Serve the main application page."""
     return render_template('index.html')
@@ -38,9 +136,10 @@ def get_available_agents():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections', methods=['GET'])
+@login_required
 def get_collections():
-    """Get all document collections."""
-    collections = Collection.query.all()
+    """Get all document collections for the current user."""
+    collections = get_user_collections_query().all()
     return jsonify([{
         'id': c.id,
         'name': c.name,
@@ -49,45 +148,55 @@ def get_collections():
     } for c in collections])
 
 @bp.route('/api/collections', methods=['POST'])
+@login_required
 def create_collection():
-    """Create a new document collection."""
+    """Create a new document collection for the current user."""
+    from auth import create_user_collection
+
     data = request.get_json()
     name = data.get('name', '').strip()
-    
+
     if not name:
         return jsonify({'error': 'Collection name is required'}), 400
-    
-    if Collection.query.filter_by(name=name).first():
+
+    # Check if collection name exists for this user
+    user = get_current_user()
+    existing = Collection.query.filter_by(name=name, user_id=user.id).first()
+    if existing:
         return jsonify({'error': 'Collection name already exists'}), 400
-    
-    collection = Collection(name=name)
-    db.session.add(collection)
-    db.session.commit()
-    
-    return jsonify({
-        'id': collection.id,
-        'name': collection.name,
-        'created_at': collection.created_at.isoformat(),
-        'document_count': 0
-    })
+
+    try:
+        collection = create_user_collection(name)
+        return jsonify({
+            'id': collection.id,
+            'name': collection.name,
+            'created_at': collection.created_at.isoformat(),
+            'document_count': 0
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>', methods=['PUT'])
+@login_required
 def update_collection(collection_id):
     """Update collection name."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     data = request.get_json()
     name = data.get('name', '').strip()
-    
+
     if not name:
         return jsonify({'error': 'Collection name is required'}), 400
-    
-    if name != collection.name and Collection.query.filter_by(name=name).first():
+
+    # Check if name exists for this user (exclude current collection)
+    user = get_current_user()
+    existing = Collection.query.filter_by(name=name, user_id=user.id).filter(Collection.id != collection_id).first()
+    if existing:
         return jsonify({'error': 'Collection name already exists'}), 400
-    
+
     collection.name = name
     collection.updated_at = datetime.utcnow()
     db.session.commit()
-    
+
     return jsonify({
         'id': collection.id,
         'name': collection.name,
@@ -96,17 +205,18 @@ def update_collection(collection_id):
     })
 
 @bp.route('/api/collections/<int:collection_id>', methods=['DELETE'])
+@login_required
 def delete_collection(collection_id):
     """Delete a collection and all its documents."""
-    collection = Collection.query.get_or_404(collection_id)
-    
+    collection = get_user_collection_or_404(collection_id)
+
     # Delete from vector store
     vector_store.delete_collection(collection.name)
-    
-    # Delete from database
+
+    # Delete from database (cascade will handle documents and chunks)
     db.session.delete(collection)
     db.session.commit()
-    
+
     return jsonify({'success': True})
 
 def _process_uploaded_file(file, collection_id, relative_path=None):
@@ -192,9 +302,10 @@ def _process_uploaded_file(file, collection_id, relative_path=None):
             os.remove(temp_path)
 
 @bp.route('/api/collections/<int:collection_id>/upload', methods=['POST'])
+@login_required
 def upload_files(collection_id):
     """Upload files or directory to a collection."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     
     # Handle both single files and multiple files from directory selection
     files = []
@@ -250,9 +361,10 @@ def upload_files(collection_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/conversations', methods=['GET'])
+@login_required
 def get_conversations():
-    """Get all conversations."""
-    conversations = Conversation.query.order_by(Conversation.updated_at.desc()).all()
+    """Get all conversations for the current user."""
+    conversations = get_user_conversations_query().order_by(Conversation.updated_at.desc()).all()
     return jsonify([{
         'id': c.id,
         'title': c.title or f'Conversation {c.id}',
@@ -262,27 +374,30 @@ def get_conversations():
     } for c in conversations])
 
 @bp.route('/api/conversations', methods=['POST'])
+@login_required
 def create_conversation():
-    """Create a new conversation."""
+    """Create a new conversation for the current user."""
+    from auth import create_user_conversation
+
     data = request.get_json() or {}
     title = data.get('title', f'New Conversation')
-    
-    conversation = Conversation(title=title)
-    db.session.add(conversation)
-    db.session.commit()
-    
-    return jsonify({
-        'id': conversation.id,
-        'title': conversation.title,
-        'created_at': conversation.created_at.isoformat(),
-        'updated_at': conversation.updated_at.isoformat(),
-        'message_count': 0
-    })
+
+    try:
+        conversation = create_user_conversation(title)
+        return jsonify({
+            'id': conversation.id,
+            'title': conversation.title,
+            'created_at': conversation.created_at.isoformat(),
+            'updated_at': conversation.updated_at.isoformat()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/conversations/<int:conversation_id>', methods=['GET'])
+@login_required
 def get_conversation(conversation_id):
     """Get a specific conversation with its messages."""
-    conversation = Conversation.query.get_or_404(conversation_id)
+    conversation = get_user_conversation_or_404(conversation_id)
     messages = Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
     
     return jsonify({
@@ -302,15 +417,17 @@ def get_conversation(conversation_id):
     })
 
 @bp.route('/api/conversations/<int:conversation_id>', methods=['DELETE'])
+@login_required
 def delete_conversation(conversation_id):
     """Delete a conversation."""
-    conversation = Conversation.query.get_or_404(conversation_id)
+    conversation = get_user_conversation_or_404(conversation_id)
     db.session.delete(conversation)
     db.session.commit()
     return jsonify({'success': True})
 
 
 @bp.route('/api/chat', methods=['POST'])
+@login_required
 def chat():
     """Handle chat messages with AI agent."""
     # Support both JSON and multipart/form-data
@@ -336,18 +453,19 @@ def chat():
     try:
         # Get conversation
         if conversation_id:
-            conversation = Conversation.query.get_or_404(conversation_id)
+            conversation = get_user_conversation_or_404(conversation_id)
         else:
             # Create new conversation
+            current_user_obj = get_current_user()
             title = user_message[:50] + '...' if user_message and len(user_message) > 50 else (user_message or 'Image Query')
-            conversation = Conversation(title=title)
+            conversation = Conversation(title=title, user_id=current_user_obj.id)
             db.session.add(conversation)
             db.session.flush()
         
         # Get collection name if specified
         collection_name = None
         if collection_id:
-            collection = Collection.query.get_or_404(collection_id)
+            collection = get_user_collection_or_404(collection_id)
             collection_name = collection.name
         
         # Get conversation history
@@ -427,7 +545,9 @@ def chat():
                         try:
                             # Find document by file path in metadata
                             file_path = chunk['metadata'].get('file_path', '')
-                            collection = Collection.query.filter_by(name=collection_name).first()
+                            # Get user's collection by name to ensure isolation
+                            user = get_current_user()
+                            collection = Collection.query.filter_by(name=collection_name, user_id=user.id).first()
                             if collection:
                                 document = Document.query.filter_by(
                                     collection_id=collection.id,
@@ -509,9 +629,10 @@ def chat():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>/files', methods=['GET'])
+@login_required
 def get_collection_files(collection_id):
     """Get all files in a collection with proper count."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     documents = Document.query.filter_by(collection_id=collection_id).all()
     
     files = []
@@ -540,9 +661,10 @@ def get_collection_files(collection_id):
     })
 
 @bp.route('/api/collections/<int:collection_id>/file-links', methods=['GET'])
+@login_required
 def get_collection_file_links(collection_id):
     """Get all file links in a collection for easy access."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     documents = Document.query.filter_by(collection_id=collection_id).all()
     
     file_links = []
@@ -580,9 +702,10 @@ def get_collection_file_links(collection_id):
     })
 
 @bp.route('/api/collections/<int:collection_id>/files/<int:document_id>', methods=['DELETE'])
+@login_required
 def remove_file_from_collection(collection_id, document_id):
     """Remove a specific file from collection."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     document = Document.query.filter_by(id=document_id, collection_id=collection_id).first_or_404()
     
     # Delete from vector store
@@ -602,9 +725,12 @@ def remove_file_from_collection(collection_id, document_id):
     return jsonify({'success': True})
 
 @bp.route('/api/documents/<int:document_id>', methods=['GET'])
+@login_required
 def get_document(document_id):
     """Get a specific document with full content and optional paragraph highlighting."""
+    # Get document and verify it belongs to user's collection
     document = Document.query.get_or_404(document_id)
+    collection = get_user_collection_or_404(document.collection_id)
     highlight_chunk = request.args.get('highlight_chunk', type=int)
 
     # Get chunks for this document
@@ -632,15 +758,28 @@ def document_viewer():
 
 # Settings Routes
 @bp.route('/api/settings', methods=['GET'])
+@login_required
 def get_settings():
     """Get user settings."""
-    # For now, return default settings
-    # In a real app, you'd load from database or user preferences
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # Split full_name into first and last name
+    name_parts = user.full_name.split() if user.full_name else []
+    first_name = name_parts[0] if len(name_parts) > 0 else ''
+    last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+    # Get user profile for additional fields
+    profile = user.user_profile
+
     return jsonify({
         'profile': {
-            'firstName': '',
-            'lastName': '',
-            'email': ''
+            'firstName': first_name,
+            'lastName': last_name,
+            'email': user.email,
+            'username': user.username,
+            'full_name': user.full_name
         },
         'apiKeys': {
             'openai': '',
@@ -652,31 +791,116 @@ def get_settings():
     })
 
 @bp.route('/api/settings', methods=['POST'])
+@login_required
 def save_settings():
     """Save user settings."""
     try:
         settings = request.get_json()
-        # For now, just acknowledge the save
-        # In a real app, you'd save to database or user preferences file
-        print(f"Settings saved: {settings}")  # Debug log
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Update user profile information if provided
+        if 'profile' in settings:
+            profile_data = settings['profile']
+
+            # Update full_name if firstName or lastName changed
+            if 'firstName' in profile_data or 'lastName' in profile_data:
+                first_name = profile_data.get('firstName', '').strip()
+                last_name = profile_data.get('lastName', '').strip()
+                if first_name or last_name:
+                    user.full_name = f"{first_name} {last_name}".strip()
+
+            # Update email if changed
+            if 'email' in profile_data and profile_data['email'] != user.email:
+                new_email = profile_data['email'].strip()
+                if new_email:
+                    # Check if email already exists for another user
+                    existing_user = User.query.filter(
+                        User.email == new_email,
+                        User.id != user.id
+                    ).first()
+                    if existing_user:
+                        return jsonify({'error': 'Email already exists'}), 400
+                    user.email = new_email
+
+            db.session.commit()
+
         return jsonify({'success': True, 'message': 'Settings saved successfully'})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# User Info Routes
+@bp.route('/api/user/current', methods=['GET'])
+@login_required
+def get_current_user_info():
+    """Get current authenticated user information."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    return jsonify({
+        'id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'full_name': user.full_name,
+        'theme_preference': user.theme_preference or 'light',
+        'created_at': user.created_at.isoformat() if user.created_at else None,
+        'last_login': user.last_login.isoformat() if user.last_login else None
+    })
+
+# Theme Preference Routes
+@bp.route('/api/user/theme', methods=['PUT'])
+@login_required
+def update_user_theme():
+    """Update user theme preference."""
+    try:
+        data = request.get_json()
+        theme = data.get('theme', '').strip().lower()
+
+        # Validate theme
+        valid_themes = ['light', 'dark']
+        if theme not in valid_themes:
+            return jsonify({'error': f'Invalid theme. Must be one of: {", ".join(valid_themes)}'}), 400
+
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Update theme preference
+        user.theme_preference = theme
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'theme': theme,
+            'message': f'Theme updated to {theme}'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # User Profile Routes
 @bp.route('/api/user/profile', methods=['GET'])
+@login_required
 def get_user_profile():
     """Get user profile information."""
-    # For now, get the first user profile or create a default one
-    profile = UserProfile.query.first()
-    
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    profile = user.user_profile
+
     if not profile:
-        # Create default profile
+        # Create default profile for this user
         profile = UserProfile(
-            name='User',
-            lastname='Name',
-            email='user@example.com'
+            user_id=user.id,
+            name=user.full_name.split()[0] if user.full_name else user.username,
+            lastname=' '.join(user.full_name.split()[1:]) if user.full_name and len(user.full_name.split()) > 1 else '',
+            email=user.email
         )
         db.session.add(profile)
         db.session.commit()
@@ -693,14 +917,16 @@ def get_user_profile():
     })
 
 @bp.route('/api/user/profile', methods=['PUT'])
+@login_required
 def update_user_profile():
     """Update user profile information."""
     data = request.get_json()
-    
-    # Get or create profile
-    profile = UserProfile.query.first()
+
+    # Get current user's profile
+    user = get_current_user()
+    profile = user.user_profile
     if not profile:
-        profile = UserProfile()
+        profile = UserProfile(user_id=user.id)
         db.session.add(profile)
     
     # Update fields
@@ -740,9 +966,11 @@ def update_user_profile():
 
 # API Key Routes
 @bp.route('/api/user/api-keys', methods=['GET'])
+@login_required
 def get_api_keys():
     """Get all API keys for the user."""
-    profile = UserProfile.query.first()
+    user = get_current_user()
+    profile = user.user_profile
     if not profile:
         return jsonify([])
     
@@ -757,22 +985,25 @@ def get_api_keys():
     } for key in api_keys])
 
 @bp.route('/api/user/api-keys', methods=['POST'])
+@login_required
 def create_api_key():
     """Create a new API key."""
     data = request.get_json()
     service_name = data.get('service_name', '').strip()
     key_value = data.get('key_value', '').strip()
-    
+
     if not service_name or not key_value:
         return jsonify({'error': 'Service name and key value are required'}), 400
-    
-    # Get or create profile
-    profile = UserProfile.query.first()
+
+    # Get or create user's profile
+    user = get_current_user()
+    profile = user.user_profile
     if not profile:
         profile = UserProfile(
-            name='User',
-            lastname='Name',
-            email='user@example.com'
+            user_id=user.id,
+            name=user.full_name.split()[0] if user.full_name else user.username,
+            lastname=' '.join(user.full_name.split()[1:]) if user.full_name and len(user.full_name.split()) > 1 else '',
+            email=user.email
         )
         db.session.add(profile)
         db.session.flush()
@@ -809,10 +1040,16 @@ def create_api_key():
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/user/api-keys/<int:key_id>', methods=['PUT'])
+@login_required
 def update_api_key(key_id):
     """Update an API key."""
     data = request.get_json()
-    api_key = ApiKey.query.get_or_404(key_id)
+    user = get_current_user()
+    # Ensure the API key belongs to the current user
+    api_key = ApiKey.query.join(UserProfile).filter(
+        ApiKey.id == key_id,
+        UserProfile.user_id == user.id
+    ).first_or_404()
     
     if 'service_name' in data:
         api_key.service_name = data['service_name'].strip()
@@ -835,9 +1072,15 @@ def update_api_key(key_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/user/api-keys/<int:key_id>', methods=['DELETE'])
+@login_required
 def delete_api_key(key_id):
     """Delete an API key."""
-    api_key = ApiKey.query.get_or_404(key_id)
+    user = get_current_user()
+    # Ensure the API key belongs to the current user
+    api_key = ApiKey.query.join(UserProfile).filter(
+        ApiKey.id == key_id,
+        UserProfile.user_id == user.id
+    ).first_or_404()
     
     try:
         db.session.delete(api_key)
@@ -850,9 +1093,10 @@ def delete_api_key(key_id):
 
 
 @bp.route('/api/collections/<int:collection_id>/search', methods=['POST'])
+@login_required
 def search_collection(collection_id):
     """Search within a collection with filters."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     data = request.get_json()
     query = data.get('query', '').strip()
     search_type = data.get('search_type', 'text')  # 'text', 'category', 'file_type'
@@ -880,9 +1124,10 @@ def search_collection(collection_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>/stats', methods=['GET'])
+@login_required
 def get_collection_stats(collection_id):
     """Get detailed statistics about a collection."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     
     try:
         # Get vector store stats
@@ -913,9 +1158,10 @@ def get_collection_stats(collection_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>/summary', methods=['GET'])
+@login_required
 def get_collection_summary(collection_id):
     """Get a summary of all documents in a collection."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     
     try:
         summary_data = vector_store.get_collection_summary(collection.name)
@@ -996,9 +1242,10 @@ def serve_image(file_path):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>/images', methods=['GET'])
+@login_required
 def get_collection_images(collection_id):
     """Get all images in a collection."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     
     try:
         images = vector_store.get_collection_images(collection.name)
@@ -1011,9 +1258,10 @@ def get_collection_images(collection_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/collections/<int:collection_id>/images/search', methods=['POST'])
+@login_required
 def search_similar_images(collection_id):
     """Search for similar images by uploading an image."""
-    collection = Collection.query.get_or_404(collection_id)
+    collection = get_user_collection_or_404(collection_id)
     
     if 'image' not in request.files:
         return jsonify({'error': 'No image file provided'}), 400
@@ -1056,6 +1304,7 @@ def search_similar_images(collection_id):
 
 
 @bp.route('/api/search/files', methods=['POST'])
+@login_required
 def search_files_across_collections():
     """Search for files across all collections."""
     data = request.get_json()
@@ -1067,9 +1316,9 @@ def search_files_across_collections():
         return jsonify({'error': 'Search query is required'}), 400
     
     try:
-        # Search across all collections
+        # Search across user's collections only
         all_results = []
-        collections = Collection.query.all()
+        collections = get_user_collections_query().all()
         
         for collection in collections:
             # Build filters
@@ -1245,6 +1494,7 @@ def test_llm_config(config_id):
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/conversations/<int:conversation_id>/save-to-collection', methods=['POST'])
+@login_required
 def save_conversation_to_collection(conversation_id):
     """Save an entire conversation to a collection as a document."""
     try:
@@ -1253,7 +1503,7 @@ def save_conversation_to_collection(conversation_id):
         collection_name = data.get('collection_name')
         
         # Get the conversation
-        conversation = Conversation.query.get_or_404(conversation_id)
+        conversation = get_user_conversation_or_404(conversation_id)
         messages = Message.query.filter_by(conversation_id=conversation_id).order_by(Message.created_at).all()
         
         if not messages:
@@ -1262,15 +1512,16 @@ def save_conversation_to_collection(conversation_id):
         # Create or get collection
         collection = None
         if collection_id:
-            collection = Collection.query.get_or_404(collection_id)
+            collection = get_user_collection_or_404(collection_id)
         elif collection_name:
-            # Check if collection exists
-            collection = Collection.query.filter_by(name=collection_name.strip()).first()
+            # Check if collection exists for this user
+            user = get_current_user()
+            collection = Collection.query.filter_by(name=collection_name.strip(), user_id=user.id).first()
             if not collection:
-                # Create new collection
-                collection = Collection(name=collection_name.strip())
-                db.session.add(collection)
-                db.session.flush()  # Get the ID without committing
+                # Create new collection for this user
+                from auth import create_user_collection
+                collection = create_user_collection(collection_name.strip())
+                # No need to flush since create_user_collection already commits
         else:
             return jsonify({'error': 'Either collection_id or collection_name must be provided'}), 400
         

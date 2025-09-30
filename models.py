@@ -1,10 +1,42 @@
 from datetime import datetime
 import json
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
 from database import db
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    full_name = db.Column(db.String(200))
+    is_active = db.Column(db.Boolean, default=True)
+    is_admin = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime)
+    theme_preference = db.Column(db.String(10), default='light')
+
+    # Relationships
+    collections = db.relationship('Collection', backref='user', lazy=True, cascade='all, delete-orphan')
+    conversations = db.relationship('Conversation', backref='user', lazy=True, cascade='all, delete-orphan')
+    user_profile = db.relationship('UserProfile', backref='user', uselist=False, cascade='all, delete-orphan')
+
+    def set_password(self, password):
+        """Set password hash."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        """Check password against hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def get_vector_store_prefix(self):
+        """Get unique prefix for this user's vector store collections."""
+        return f"user_{self.id}_"
 
 class Collection(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     source_type = db.Column(db.String(50), default='file')  # 'file', 'directory', 'url'
     source_path = db.Column(db.Text)  # Path to source directory or file
@@ -12,6 +44,9 @@ class Collection(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     documents = db.relationship('Document', backref='collection', lazy=True, cascade='all, delete-orphan')
+
+    # Ensure collection names are unique per user
+    __table_args__ = (db.UniqueConstraint('user_id', 'name', name='unique_user_collection_name'),)
     
     def get_processing_stats(self):
         """Parse processing stats from JSON string."""
@@ -92,6 +127,7 @@ class DocumentChunk(db.Model):
 
 class Conversation(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -126,9 +162,10 @@ class Message(db.Model):
 
 class UserProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     lastname = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(200), nullable=False, unique=True)
+    email = db.Column(db.String(200), nullable=False)
     phone = db.Column(db.String(20))
     address = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

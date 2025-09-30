@@ -1,7 +1,10 @@
 from typing import Dict, Any, Optional, List
+import json
+import re
 from .base_agent import BaseAgent
 from vector_store import VectorStore
 from document_processor import DocumentProcessor
+from .tools.tool_manager import ToolManager
 
 class BasicAgent(BaseAgent):
     def __init__(self, api_key: Optional[str] = None):
@@ -9,6 +12,7 @@ class BasicAgent(BaseAgent):
         super().__init__(api_key)
         self.vector_store = VectorStore()
         self.document_processor = DocumentProcessor()
+        self.tool_manager = ToolManager()
     
     def get_agent_name(self) -> str:
         """Return the name of this agent."""
@@ -16,9 +20,21 @@ class BasicAgent(BaseAgent):
 
     def get_system_prompt(self) -> str:
         """Return the system prompt for the basic agent."""
-        return """You are Orb, an AI knowledge agent. You help users by providing accurate, helpful responses based on their queries and any relevant documents provided.
+        tools_description = self.tool_manager.get_tools_description()
+        return f"""You are Orb, an AI knowledge agent. You help users by providing accurate, helpful responses based on their queries and any relevant documents provided.
 
 When document context is provided, use it to inform your response but also draw on your general knowledge when appropriate. Always be clear about what information comes from the provided documents versus your general knowledge.
+
+You have access to the following tools:
+{tools_description}
+
+When a user asks for something that can be handled by one of these tools (like current time, date, or mathematical calculations), respond with a tool call in this format:
+TOOL_CALL: tool_name(parameters)
+
+For example:
+- For "What time is it?": TOOL_CALL: get_datetime({{"format": "human"}})
+- For "Calculate 15 * 23": TOOL_CALL: calculate({{"expression": "15 * 23"}})
+- For "What's the current date?": TOOL_CALL: get_datetime({{"format": "date"}})
 
 Be conversational, helpful, and concise in your responses. Provide direct answers to user questions without unnecessary elaboration unless specifically requested."""
 
@@ -84,7 +100,10 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
         # Step 2: Generate response (single pass, no verification)
         notify_progress("generating", "Generating response...")
         response_text = self._generate_response(user_message, final_context, conversation_history)
-        
+
+        # Step 3: Check for tool calls and execute them
+        response_text = self._process_tool_calls(response_text, notify_progress)
+
         notify_progress("finalizing", "Finalizing response...")
         
         return {
@@ -161,3 +180,95 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
         except Exception as e:
             print(f"Error searching for images: {e}")
             return []
+
+    def _process_tool_calls(self, response_text: str, notify_progress: callable) -> str:
+        """Process any tool calls in the response text."""
+        import re
+
+        def find_tool_calls(text):
+            """Find tool calls with proper parentheses matching."""
+            results = []
+            pattern = r'TOOL_CALL:\s*(\w+)\s*\('
+
+            for match in re.finditer(pattern, text):
+                start = match.end() - 1  # Position of opening parenthesis
+                tool_name = match.group(1)
+
+                # Find matching closing parenthesis
+                paren_count = 0
+                i = start
+                while i < len(text):
+                    if text[i] == '(':
+                        paren_count += 1
+                    elif text[i] == ')':
+                        paren_count -= 1
+                        if paren_count == 0:
+                            # Found matching closing parenthesis
+                            params_str = text[start + 1:i].strip()
+                            full_match = text[match.start():i + 1]
+                            results.append((full_match, tool_name, params_str))
+                            break
+                    i += 1
+
+            return results
+
+        def replace_tool_call(tool_call_text, tool_name, params_str):
+            try:
+                notify_progress("tool_execution", f"Executing {tool_name}...")
+
+
+                # Parse parameters
+                if params_str:
+                    # Try to parse as JSON
+                    try:
+                        parameters = json.loads(params_str)
+                    except json.JSONDecodeError:
+                        # If not valid JSON, try to create a safe evaluation
+                        try:
+                            # Replace single quotes with double quotes for JSON compatibility
+                            fixed_params = params_str.replace("'", '"')
+                            parameters = json.loads(fixed_params)
+                        except json.JSONDecodeError:
+                            # Last resort: use ast.literal_eval for safety
+                            import ast
+                            try:
+                                parameters = ast.literal_eval(params_str)
+                            except:
+                                parameters = {}
+                else:
+                    parameters = {}
+
+                # Execute the tool
+                result = self.tool_manager.execute_tool(tool_name, parameters)
+
+                if "error" in result:
+                    return f"Error executing {tool_name}: {result['error']}"
+
+                # Format the result nicely
+                if tool_name == "get_datetime":
+                    if "component" in result:
+                        return f"The {result['component']} is {result['value']}"
+                    else:
+                        return f"Current date/time: {result['datetime']}"
+                elif tool_name == "calculate":
+                    return f"The result is: {result['result']}"
+                else:
+                    # Generic formatting for other tools
+                    if "result" in result:
+                        return str(result["result"])
+                    else:
+                        return str(result)
+
+            except Exception as e:
+                return f"Error executing {tool_name}: {str(e)}"
+
+        # Process all tool calls
+        processed_response = response_text
+        tool_calls = find_tool_calls(response_text)
+
+        # Process in reverse order to maintain text positions
+        for tool_call_text, tool_name, params_str in reversed(tool_calls):
+            replacement = replace_tool_call(tool_call_text, tool_name, params_str)
+            processed_response = processed_response.replace(tool_call_text, replacement, 1)
+
+        return processed_response

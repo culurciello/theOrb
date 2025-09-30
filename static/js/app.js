@@ -11,7 +11,7 @@ class OrvinApp {
             selectedAgentId: null,
             selectedLLMId: null,
             activeTab: 'collections',
-            currentTheme: localStorage.getItem('orb-theme') || 'light',
+            currentTheme: 'light', // Will be loaded from user preferences
             pendingFiles: null,
             expandedCollections: new Set(),
             collectionFiles: {},
@@ -36,11 +36,11 @@ class OrvinApp {
 
     async init() {
         try {
-            // Initialize theme
-            this.initializeTheme();
-
-            // Load initial data
+            // Load initial data (includes user info with theme preference)
             await this.loadInitialData();
+
+            // Initialize theme after loading user preferences
+            this.initializeTheme();
 
             // Set up event listeners
             this.setupEventListeners();
@@ -70,12 +70,31 @@ class OrvinApp {
         this.updateThemeToggle();
     }
 
-    toggleTheme() {
+    async toggleTheme() {
         const newTheme = this.state.currentTheme === 'dark' ? 'light' : 'dark';
-        this.state.currentTheme = newTheme;
-        localStorage.setItem('orb-theme', newTheme);
-        document.documentElement.setAttribute('data-theme', newTheme);
-        this.updateThemeToggle();
+
+        try {
+            // Save to server
+            const response = await fetch('/api/user/theme', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ theme: newTheme })
+            });
+
+            if (response.ok) {
+                this.state.currentTheme = newTheme;
+                document.documentElement.setAttribute('data-theme', newTheme);
+                this.updateThemeToggle();
+                this.showNotification(`Switched to ${newTheme} theme`, 'success');
+            } else {
+                throw new Error('Failed to save theme preference');
+            }
+        } catch (error) {
+            console.error('Error updating theme:', error);
+            this.showNotification('Failed to save theme preference', 'error');
+        }
     }
 
     updateThemeToggle() {
@@ -106,7 +125,8 @@ class OrvinApp {
                 this.loadAvailableAgents(),
                 this.loadAvailableLLMs(),
                 this.loadConversations(),
-                this.loadSettings()
+                this.loadSettings(),
+                this.loadUserTheme()
             ]);
 
             this.updateSelectors();
@@ -221,51 +241,16 @@ class OrvinApp {
             const conversations = await response.json();
             this.state.conversations = conversations;
 
-            // If no conversations from API, add some mock data for demo
-            if (conversations.length === 0) {
-                this.addMockConversations();
-            }
+            // Use actual conversations from API only (no mock data)
 
             return this.state.conversations;
         } catch (error) {
             console.error('Error loading conversations:', error);
-            // Add mock conversations for demo when API is not available
-            this.addMockConversations();
+            // Set empty conversations array on error
+            this.state.conversations = [];
         }
     }
 
-    // Add mock conversations for testing/demo
-    addMockConversations() {
-        this.state.conversations = [
-            {
-                id: 1,
-                title: "Legal Document Analysis",
-                created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
-                messages: [
-                    { role: 'user', content: 'What are the key points in this legal document?' },
-                    { role: 'assistant', content: 'Based on the documents in your collection, here are the key considerations...' }
-                ]
-            },
-            {
-                id: 2,
-                title: "Contract Review Session",
-                created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-                messages: [
-                    { role: 'user', content: 'Can you review this contract for potential issues?' },
-                    { role: 'assistant', content: 'I\'ve reviewed the contract and found several areas that need attention...' }
-                ]
-            },
-            {
-                id: 3,
-                title: "Research Discussion",
-                created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
-                messages: [
-                    { role: 'user', content: 'Help me understand the methodology in this research paper' },
-                    { role: 'assistant', content: 'The research methodology follows a comprehensive approach...' }
-                ]
-            }
-        ];
-    }
 
     async sendChatMessage(message, conversationId, collectionId, agentId) {
         const response = await fetch('/api/chat', {
@@ -574,7 +559,7 @@ class OrvinApp {
             // Add assistant response
             const assistantMessage = {
                 role: 'assistant',
-                text: response.response || this.mockAssistantReply(messageText, activeCollection),
+                text: response.response || 'Sorry, I could not generate a response at this time.',
                 cites: response.citations || [],
                 documentReferences: response.document_references || []
             };
@@ -583,29 +568,17 @@ class OrvinApp {
         } catch (error) {
             console.error('Error sending message:', error);
 
-            // Add error message with mock response as fallback
-            const activeCollection = this.state.collections.find(c => c.id === this.state.activeCollectionId);
+            // Add error message
             const errorMessage = {
                 role: 'assistant',
-                text: this.mockAssistantReply(messageText, activeCollection),
-                cites: activeCollection ? [`${activeCollection.name}_document.pdf p.1`] : []
+                text: 'Sorry, there was an error processing your request. Please try again.',
+                cites: []
             };
             this.state.chatMessages.push(errorMessage);
             this.renderChatMessages();
         }
     }
 
-    mockAssistantReply(userMsg, activeCollection) {
-        const responses = [
-            "Based on the documents in your collection, here are the key considerations:",
-            "According to the legal precedents in your files, the standard approach is:",
-            "The contracts documentation suggests that you should review:",
-            "From the case law analysis, it appears that:"
-        ];
-
-        const baseReply = responses[Math.floor(Math.random() * responses.length)];
-        return `${baseReply} This aligns with established practices and precedents.`;
-    }
 
     formatMessageContent(text) {
         if (!text) return '';
@@ -935,40 +908,11 @@ class OrvinApp {
             console.error('Error loading conversation:', error);
             this.showNotification(`Failed to load conversation: ${error.message}`, 'error');
 
-            // For testing purposes, load some mock data if API fails
-            this.loadMockConversation(conversationId);
+            // Clear chat messages on error
+            this.state.chatMessages = [];
         }
     }
 
-    // Mock conversation for testing when API is not available
-    loadMockConversation(conversationId) {
-        this.state.chatMessages = [
-            {
-                role: 'user',
-                text: 'What are the key points in this legal document?',
-                timestamp: new Date().toISOString()
-            },
-            {
-                role: 'assistant',
-                text: 'Based on the documents in your collection, here are the key considerations: The contract outlines several important clauses regarding liability and termination procedures.',
-                cites: [`Document_${conversationId}.pdf p.1`, `Legal_Brief_${conversationId}.docx p.3`],
-                timestamp: new Date().toISOString()
-            },
-            {
-                role: 'user',
-                text: 'Can you elaborate on the liability clauses?',
-                timestamp: new Date().toISOString()
-            },
-            {
-                role: 'assistant',
-                text: 'The liability clauses establish clear boundaries for responsibility distribution between parties. Section 4.2 specifically addresses limitation of damages and indemnification procedures.',
-                cites: [`Document_${conversationId}.pdf p.4`],
-                timestamp: new Date().toISOString()
-            }
-        ];
-        this.renderChatMessages();
-        this.showNotification(`Mock conversation ${conversationId} loaded for demo`, 'info');
-    }
 
     async deleteConversation(conversationId) {
         if (!confirm('Are you sure you want to delete this conversation?')) {
@@ -1053,6 +997,8 @@ class OrvinApp {
 
             if (response.ok) {
                 this.showNotification('Settings saved successfully', 'success');
+                // Reload user info to reflect any changes immediately
+                await this.loadCurrentUserInfo();
                 this.closeSettingsModal();
             } else {
                 throw new Error('Failed to save settings');
@@ -1081,10 +1027,15 @@ class OrvinApp {
         document.getElementById('settingsModal').style.display = 'none';
     }
 
-    populateSettingsModal() {
+    async populateSettingsModal() {
+        // Load fresh settings data from server
+        await this.loadSettings();
         const settings = this.state.userSettings;
 
-        // Populate user profile
+        // Load and display current user info (updates the header display)
+        await this.loadCurrentUserInfo();
+
+        // Populate user profile form fields with the fresh settings data
         document.getElementById('firstName').value = settings.profile?.firstName || '';
         document.getElementById('lastName').value = settings.profile?.lastName || '';
         document.getElementById('email').value = settings.profile?.email || '';
@@ -1098,6 +1049,83 @@ class OrvinApp {
         document.getElementById('maxTokens').value = settings.maxTokens || 4000;
         document.getElementById('temperature').value = settings.temperature || 0.7;
         document.getElementById('temperatureValue').textContent = settings.temperature || 0.7;
+    }
+
+    async loadCurrentUserInfo() {
+        try {
+            const response = await fetch('/api/user/current');
+            if (response.ok) {
+                const userInfo = await response.json();
+
+                // Update the current user display elements
+                const usernameElement = document.getElementById('currentUsername');
+                const emailElement = document.getElementById('currentUserEmail');
+
+                if (usernameElement) {
+                    usernameElement.textContent = userInfo.username || 'Unknown User';
+                }
+                if (emailElement) {
+                    emailElement.textContent = userInfo.email || 'No email provided';
+                }
+            } else {
+                console.error('Failed to load current user info');
+            }
+        } catch (error) {
+            console.error('Error loading current user info:', error);
+        }
+    }
+
+    async loadUserTheme() {
+        try {
+            const response = await fetch('/api/user/current');
+            if (response.ok) {
+                const userInfo = await response.json();
+
+                // Update theme from user preferences
+                if (userInfo.theme_preference) {
+                    this.state.currentTheme = userInfo.theme_preference;
+                    console.log(`Loaded user theme preference: ${userInfo.theme_preference}`);
+                }
+            } else {
+                console.error('Failed to load user theme preference');
+            }
+        } catch (error) {
+            console.error('Error loading user theme:', error);
+        }
+    }
+
+    async handleLogout() {
+        try {
+            // Show confirmation dialog
+            const confirmLogout = confirm('Are you sure you want to sign out?');
+            if (!confirmLogout) {
+                return;
+            }
+
+            // Close settings modal first
+            this.closeSettingsModal();
+
+            // Show loading state
+            this.showNotification('Signing out...', 'info');
+
+            // Call logout API
+            const response = await fetch('/logout', {
+                method: 'GET',
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                // Theme preference stays with user account
+
+                // Redirect to login page
+                window.location.href = '/login';
+            } else {
+                throw new Error('Logout failed');
+            }
+        } catch (error) {
+            console.error('Error during logout:', error);
+            this.showNotification('Error signing out. Please try again.', 'error');
+        }
     }
 
     collectSettingsFromModal() {
@@ -1363,3 +1391,4 @@ window.openSettingsModal = () => app.openSettingsModal();
 window.closeSettingsModal = () => app.closeSettingsModal();
 window.saveSettings = () => app.handleSaveSettings();
 window.togglePasswordVisibility = (id) => app.togglePasswordVisibility(id);
+window.handleLogout = () => app.handleLogout();
