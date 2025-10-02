@@ -1,10 +1,14 @@
 from typing import Dict, Any, Optional, List
 import json
 import re
+import logging
 from .base_agent import BaseAgent
 from vector_store import VectorStore
 from document_processor import DocumentProcessor
 from .tools.tool_manager import ToolManager
+
+# Set up logger
+logger = logging.getLogger('orb')
 
 class BasicAgent(BaseAgent):
     def __init__(self, api_key: Optional[str] = None):
@@ -115,23 +119,30 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
             "agent_type": "basic"
         }
 
-    def _generate_response(self, user_message: str, context: str, 
+    def _generate_response(self, user_message: str, context: str,
                           conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
         """Generate response to user query using single LLM call."""
         messages = self._build_messages(user_message, context, conversation_history)
-        
+
+        # Get current model info for logging
+        current_model = self.llm_manager.get_current_provider_info()
+        model_name = f"{current_model.get('display_name', 'unknown')} ({current_model.get('model', 'unknown')})"
+
+        logger.info(f"🤖 LLM REQUEST | Agent: {self.get_agent_name()} | Model: {model_name} | Message: {user_message[:100]}...")
+
         if self.debug:
-            current_model = self.llm_manager.get_current_provider_info()
             print(f"\n🔵 {self.get_agent_name()} - GENERATING RESPONSE")
             print(f"Model: {current_model.get('model', 'unknown')} ({current_model.get('display_name', 'unknown')})")
             print(f"System: {self.get_system_prompt()}")
-        
+
         response_text = self._make_api_call(messages, self.get_system_prompt(), max_tokens=1500)
-        
+
+        logger.info(f"💬 LLM RESPONSE | Agent: {self.get_agent_name()} | Model: {model_name} | Length: {len(response_text)} chars")
+
         if self.debug:
             print(f"\n🟢 {self.get_agent_name()} - RESPONSE GENERATED")
             print(f"Response: {response_text}")
-        
+
         return response_text
 
     def _is_image_query(self, user_message: str) -> bool:
@@ -239,10 +250,14 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
                     parameters = {}
 
                 # Execute the tool
+                logger.info(f"🔧 TOOL CALL | Tool: {tool_name} | Parameters: {parameters}")
                 result = self.tool_manager.execute_tool(tool_name, parameters)
 
                 if "error" in result:
+                    logger.error(f"❌ TOOL ERROR | Tool: {tool_name} | Error: {result['error']}")
                     return f"Error executing {tool_name}: {result['error']}"
+                else:
+                    logger.info(f"✅ TOOL SUCCESS | Tool: {tool_name} | Result: {str(result)[:200]}...")
 
                 # Format the result nicely
                 if tool_name == "get_datetime":

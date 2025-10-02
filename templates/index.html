@@ -290,6 +290,20 @@
                     >
                         History
                     </button>
+                    <button
+                        id="logTab"
+                        onclick="setActiveTab('log')"
+                        class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    >
+                        Log
+                    </button>
+                    <button
+                        id="instructionsTab"
+                        onclick="setActiveTab('instructions')"
+                        class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700"
+                    >
+                        Instructions
+                    </button>
                 </nav>
             </div>
 
@@ -371,6 +385,73 @@
                             >
                                 Export Conversations
                             </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log Tab -->
+                <div id="logContent" class="space-y-4" style="display: none;">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">System Logs</h3>
+                        <button
+                            onclick="app.refreshLogs()"
+                            class="px-3 py-1 bg-purple-600 text-white rounded-md text-xs hover:bg-purple-700 transition-colors"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                    <div id="logOutput" class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-xs h-[calc(100vh-200px)] overflow-y-auto">
+                        <p class="text-gray-500">Loading logs...</p>
+                    </div>
+                </div>
+
+                <!-- Instructions Tab -->
+                <div id="instructionsContent" class="space-y-6" style="display: none;">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">AI Agents</h3>
+                        <div class="space-y-3 text-sm text-gray-700">
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <h4 class="font-semibold text-purple-900 mb-2">Basic Agent</h4>
+                                <p>General-purpose agent for answering questions and providing information based on your collections.</p>
+                            </div>
+                            <div class="bg-blue-50 p-4 rounded-lg">
+                                <h4 class="font-semibold text-blue-900 mb-2">Deep Research Agent</h4>
+                                <p>Advanced agent for in-depth research and analysis, providing comprehensive answers with citations.</p>
+                            </div>
+                            <div class="bg-green-50 p-4 rounded-lg">
+                                <h4 class="font-semibold text-green-900 mb-2">Verification Agent</h4>
+                                <p>Specialized agent for fact-checking and verifying information accuracy.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Available Tools</h3>
+                        <div class="space-y-3 text-sm text-gray-700">
+                            <div class="border-l-4 border-purple-500 pl-4 py-2">
+                                <h4 class="font-semibold mb-1">🕐 get_datetime</h4>
+                                <p class="text-gray-600">Get current date and time information in various formats.</p>
+                            </div>
+                            <div class="border-l-4 border-blue-500 pl-4 py-2">
+                                <h4 class="font-semibold mb-1">🧮 calculate</h4>
+                                <p class="text-gray-600">Perform mathematical calculations and evaluate expressions.</p>
+                            </div>
+                            <div class="border-l-4 border-green-500 pl-4 py-2">
+                                <h4 class="font-semibold mb-1">🔬 search_pubmed</h4>
+                                <p class="text-gray-600">Search PubMed, download papers, and automatically create an indexed collection. Auto-generates collection name if not specified.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Workflow Example</h3>
+                        <div class="bg-gray-50 p-4 rounded-lg text-sm text-gray-700">
+                            <ol class="list-decimal list-inside space-y-2">
+                                <li>Ask agent: "Search PubMed for cancer therapy papers" (or specify collection name)</li>
+                                <li>Agent uses <code class="bg-gray-200 px-1 rounded">search_pubmed</code> tool to download papers and create collection automatically</li>
+                                <li>Papers are downloaded, processed, and indexed (collection name auto-generated if not specified)</li>
+                                <li>Now you can immediately ask questions about the papers in your collection!</li>
+                            </ol>
                         </div>
                     </div>
                 </div>

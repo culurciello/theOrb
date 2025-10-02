@@ -156,6 +156,13 @@ If no errors, the application will be available as web page:
 
 1. WISH: woudl like to activate it like Spotlight search on Mac OS X!
 
+2. search docs:
+- “PubMed” for Doctors   
+- “Cornell LII” for Legal - does not offer API access!
+- “DOAJ API” for Professors/ Researchers
+- “MIT OpenCourseWare” or “wikidata”  for Students
+- “SEC API” or “Fred API” for Executives/Biz users
+
 
 ## Questions to test:
 

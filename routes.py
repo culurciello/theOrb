@@ -3,9 +3,13 @@ from flask_login import login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 import os
 import uuid
+import logging
 from datetime import datetime
 
 from flask import Blueprint
+
+# Set up logger
+logger = logging.getLogger('orb')
 
 # Create a blueprint instead of importing app directly
 bp = Blueprint('main', __name__)
@@ -450,6 +454,10 @@ def chat():
     if not user_message and not uploaded_image:
         return jsonify({'error': 'Message or image is required'}), 400
 
+    # Log incoming message
+    user = get_current_user()
+    logger.info(f"📨 USER MESSAGE | User: {user.username} | Collection: {collection_id or 'None'} | Agent: {agent_id or 'auto'} | Message: {user_message[:100] if user_message else '[Image]'}...")
+
     try:
         # Get conversation
         if conversation_id:
@@ -573,8 +581,16 @@ def chat():
             # Auto-detect agent if not specified
             if not agent_id:
                 agent_id = agent_manager.detect_agent_from_message(user_message)
-            
+                logger.info(f"🤖 AGENT DETECTED | Agent: {agent_id}")
+            else:
+                logger.info(f"🤖 AGENT SELECTED | Agent: {agent_id}")
+
+            # Log context retrieval
+            if context:
+                logger.info(f"📚 CONTEXT RETRIEVED | Collection: {collection_name} | Chunks: {len(document_references)}")
+
             # Process with agent manager
+            logger.info(f"⚙️ AGENT PROCESSING | Agent: {agent_id} | Collection: {collection_name or 'None'}")
             response_data = agent_manager.process_request(
                 user_message=user_message,
                 agent_name=agent_id,
@@ -586,6 +602,9 @@ def chat():
             response_text = response_data['response']
             verified = response_data.get('verified')
             images_result = response_data.get('images', [])
+
+            # Log response
+            logger.info(f"✅ AGENT RESPONSE | Agent: {agent_id} | Length: {len(response_text)} chars | Verified: {verified}")
 
         # Save user message
         user_msg = Message(
@@ -615,7 +634,7 @@ def chat():
         conversation.updated_at = datetime.utcnow()
         
         db.session.commit()
-        
+
         return jsonify({
             'conversation_id': conversation.id,
             'response': response_text,
@@ -623,8 +642,9 @@ def chat():
             'images': images_result,
             'document_references': response_data.get('document_references', [])
         })
-    
+
     except Exception as e:
+        logger.error(f"❌ CHAT ERROR | User: {user.username} | Error: {str(e)}")
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
@@ -755,6 +775,57 @@ def document_viewer():
     """Document viewer page."""
     return render_template('document_viewer.html')
 
+
+# Log Routes
+@bp.route('/api/logs', methods=['GET'])
+@login_required
+def get_logs():
+    """Get recent application logs."""
+    try:
+        import sys
+        from io import StringIO
+
+        # Try to get logs from different sources
+        logs = []
+
+        # Option 1: Read from a log file if it exists
+        log_file_paths = ['logs/app.log', 'app.log', 'theOrb.log']
+        for log_path in log_file_paths:
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8') as f:
+                    # Get last 1000 lines
+                    all_lines = f.readlines()
+                    logs = all_lines[-1000:] if len(all_lines) > 1000 else all_lines
+                break
+
+        # Option 2: If no log file, return a message
+        if not logs:
+            logs = [
+                "🔧 VectorStore using device: mps",
+                "✓ FAISS available for accelerated vector indexing",
+                "📊 Application running successfully",
+                "ℹ️ No log file configured. Configure logging to see more details here.",
+                "",
+                "To enable logging, add this to your app.py:",
+                "import logging",
+                "logging.basicConfig(filename='app.log', level=logging.INFO)",
+            ]
+
+        # Clean up logs - remove ANSI codes if any
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        cleaned_logs = [ansi_escape.sub('', log.rstrip()) for log in logs]
+
+        return jsonify({
+            'logs': cleaned_logs,
+            'count': len(cleaned_logs)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'logs': [f'Error fetching logs: {str(e)}']
+        }), 500
 
 # Settings Routes
 @bp.route('/api/settings', methods=['GET'])

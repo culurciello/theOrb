@@ -10,6 +10,7 @@ class OrvinApp {
             activeCollectionId: null,
             selectedAgentId: null,
             selectedLLMId: null,
+            currentConversationId: null,  // Track current conversation
             activeTab: 'collections',
             currentTheme: 'light', // Will be loaded from user preferences
             pendingFiles: null,
@@ -30,6 +31,9 @@ class OrvinApp {
                 temperature: 0.7
             }
         };
+
+        // Initialize log refresh interval
+        this.logRefreshInterval = null;
 
         this.init();
     }
@@ -294,25 +298,46 @@ class OrvinApp {
         this.state.activeTab = tabName;
 
         // Update tab buttons
-        document.getElementById('collectionsTab').className =
-            tabName === 'collections'
-                ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
-                : 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
-
-        document.getElementById('historyTab').className =
-            tabName === 'history'
-                ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
-                : 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
+        const tabs = ['collections', 'history', 'log', 'instructions'];
+        tabs.forEach(tab => {
+            const tabElement = document.getElementById(`${tab}Tab`);
+            if (tabElement) {
+                tabElement.className =
+                    tabName === tab
+                        ? 'px-6 py-3 text-sm font-medium text-purple-600 border-b-2 border-purple-600'
+                        : 'px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700';
+            }
+        });
 
         // Show/hide content
-        document.getElementById('collectionsContent').style.display =
-            tabName === 'collections' ? 'block' : 'none';
-        document.getElementById('historyContent').style.display =
-            tabName === 'history' ? 'block' : 'none';
+        const contents = ['collectionsContent', 'historyContent', 'logContent', 'instructionsContent'];
+        contents.forEach(content => {
+            const contentElement = document.getElementById(content);
+            if (contentElement) {
+                contentElement.style.display = content === `${tabName}Content` ? 'block' : 'none';
+            }
+        });
 
-        // Load content for history tab
+        // Load content for specific tabs
         if (tabName === 'history') {
             this.renderConversationHistory();
+        } else if (tabName === 'log') {
+            this.refreshLogs();
+            // Auto-refresh logs every 5 seconds when log tab is active
+            if (this.logRefreshInterval) {
+                clearInterval(this.logRefreshInterval);
+            }
+            this.logRefreshInterval = setInterval(() => {
+                if (this.state.activeTab === 'log') {
+                    this.refreshLogs();
+                }
+            }, 5000);
+        } else {
+            // Clear log refresh interval when switching away from log tab
+            if (this.logRefreshInterval) {
+                clearInterval(this.logRefreshInterval);
+                this.logRefreshInterval = null;
+            }
         }
     }
 
@@ -548,13 +573,18 @@ class OrvinApp {
             // Get active collection
             const activeCollection = this.state.collections.find(c => c.id === this.state.activeCollectionId);
 
-            // Send message to API or use mock response
+            // Send message to API with current conversation ID
             const response = await this.sendChatMessage(
                 messageText,
-                null,
+                this.state.currentConversationId,
                 this.state.activeCollectionId,
                 this.state.selectedAgentId
             );
+
+            // Update conversation ID from response
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+            }
 
             // Add assistant response
             const assistantMessage = {
@@ -936,6 +966,7 @@ class OrvinApp {
 
     startNewConversation() {
         this.state.chatMessages = [];
+        this.state.currentConversationId = null;  // Reset conversation ID
         this.renderChatMessages();
         this.setActiveTab('collections');
         this.showNotification('New conversation started', 'success');
@@ -947,6 +978,7 @@ class OrvinApp {
         }
 
         this.state.chatMessages = [];
+        this.state.currentConversationId = null;  // Reset conversation ID
         this.renderChatMessages();
         this.showNotification('Chat history cleared', 'success');
     }
@@ -971,6 +1003,53 @@ class OrvinApp {
         URL.revokeObjectURL(url);
 
         this.showNotification('Conversations exported successfully', 'success');
+    }
+
+    // Log Functions
+    async refreshLogs() {
+        try {
+            const response = await fetch('/api/logs');
+            if (!response.ok) throw new Error('Failed to fetch logs');
+
+            const data = await response.json();
+            const logOutput = document.getElementById('logOutput');
+
+            if (data.logs && data.logs.length > 0) {
+                // Format logs with timestamps
+                logOutput.innerHTML = data.logs.map(line => {
+                    // Color-code different log levels
+                    if (line.includes('ERROR') || line.includes('✗')) {
+                        return `<div class="text-red-400">${this.escapeHtml(line)}</div>`;
+                    } else if (line.includes('WARNING') || line.includes('⚠️')) {
+                        return `<div class="text-yellow-400">${this.escapeHtml(line)}</div>`;
+                    } else if (line.includes('INFO') || line.includes('✓')) {
+                        return `<div class="text-green-400">${this.escapeHtml(line)}</div>`;
+                    } else if (line.includes('DEBUG') || line.includes('🔧')) {
+                        return `<div class="text-blue-400">${this.escapeHtml(line)}</div>`;
+                    } else {
+                        return `<div class="text-gray-400">${this.escapeHtml(line)}</div>`;
+                    }
+                }).join('');
+
+                // Auto-scroll to bottom
+                logOutput.scrollTop = logOutput.scrollHeight;
+            } else {
+                logOutput.innerHTML = '<p class="text-gray-500">No logs available</p>';
+            }
+        } catch (error) {
+            console.error('Error fetching logs:', error);
+            document.getElementById('logOutput').innerHTML =
+                `<p class="text-red-400">Error loading logs: ${this.escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     // Settings Functions
@@ -1392,3 +1471,4 @@ window.closeSettingsModal = () => app.closeSettingsModal();
 window.saveSettings = () => app.handleSaveSettings();
 window.togglePasswordVisibility = (id) => app.togglePasswordVisibility(id);
 window.handleLogout = () => app.handleLogout();
+window.refreshLogs = () => app.refreshLogs();

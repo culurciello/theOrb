@@ -3,6 +3,7 @@ import json
 from .base_tool import BaseTool
 from .datetime_tool import DateTimeTool
 from .calculator_tool import CalculatorTool
+from .search_pubmed_tool import SearchPubmedTool
 
 
 class ToolManager:
@@ -16,6 +17,7 @@ class ToolManager:
         """Register the default tools."""
         self.register_tool(DateTimeTool())
         self.register_tool(CalculatorTool())
+        self.register_tool(SearchPubmedTool())
 
     def register_tool(self, tool: BaseTool):
         """Register a tool."""

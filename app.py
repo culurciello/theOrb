@@ -5,10 +5,53 @@ from dotenv import load_dotenv
 import os
 import sys
 import argparse
+import logging
+from logging.handlers import RotatingFileHandler
 
 from database import db
 
 load_dotenv()
+
+# Configure logging
+def setup_logging():
+    """Set up application logging to file and console."""
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+
+    # Create a formatter
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)s | %(name)s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        'logs/app.log',
+        maxBytes=10485760,  # 10MB
+        backupCount=10
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+
+    # Console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+    # Create app logger
+    app_logger = logging.getLogger('orb')
+    app_logger.setLevel(logging.INFO)
+
+    return app_logger
+
+# Set up logging
+logger = setup_logging()
 
 # Parse command line arguments
 def parse_args():
@@ -126,10 +169,15 @@ if __name__ == '__main__':
             user = create_user_if_not_exists(username, email, full_name)
             app.config['DEFAULT_TEST_USER_ID'] = user.id
 
+            logger.info(f"🚀 Starting TheOrb in bypass mode")
+            logger.info(f"👤 Using user: {username} (ID: {user.id})")
+            logger.info(f"🌐 Access directly at: http://localhost:{args.port}/")
             print(f"🚀 Starting TheOrb in bypass mode")
             print(f"👤 Using user: {username} (ID: {user.id})")
             print(f"🌐 Access directly at: http://localhost:{args.port}/")
         else:
+            logger.info(f"🚀 Starting TheOrb with authentication")
+            logger.info(f"🌐 Login at: http://localhost:{args.port}/login")
             print(f"🚀 Starting TheOrb with authentication")
             print(f"🌐 Login at: http://localhost:{args.port}/login")
 
