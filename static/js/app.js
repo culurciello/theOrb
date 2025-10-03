@@ -205,6 +205,24 @@ class OrvinApp {
                     method: 'POST',
                     body: formData
                 });
+
+                // Check if response is ok
+                if (!response.ok) {
+                    // Try to get error message from response
+                    let errorMsg;
+                    try {
+                        const result = await response.json();
+                        errorMsg = result.error || `Server error (${response.status})`;
+                    } catch {
+                        // Response is not JSON, read as text
+                        const text = await response.text();
+                        errorMsg = text || `Server error (${response.status})`;
+                    }
+                    errors.push(`${file.name}: ${errorMsg}`);
+                    console.error(`Error uploading ${file.name}:`, errorMsg);
+                    continue;
+                }
+
                 const result = await response.json();
                 if (!result.error) {
                     successCount++;
@@ -1299,16 +1317,33 @@ class OrvinApp {
                         method: 'POST',
                         body: formData
                     });
-                    const result = await response.json();
-                    if (!result.error) {
-                        successCount++;
-                        // Check for partial errors (some files succeeded, some failed)
-                        if (result.errors && result.errors.length > 0) {
-                            errors.push(...result.errors);
+
+                    // Check if response is ok
+                    if (!response.ok) {
+                        // Try to get error message from response
+                        let errorMsg;
+                        try {
+                            const result = await response.json();
+                            errorMsg = result.error || `Server error (${response.status})`;
+                        } catch {
+                            // Response is not JSON, read as text
+                            const text = await response.text();
+                            errorMsg = text || `Server error (${response.status})`;
                         }
+                        errors.push(`${file.name}: ${errorMsg}`);
+                        console.error(`Error uploading ${file.name}:`, errorMsg);
                     } else {
-                        errors.push(`${file.name}: ${result.error}`);
-                        console.error(`Error uploading ${file.name}:`, result.error);
+                        const result = await response.json();
+                        if (!result.error) {
+                            successCount++;
+                            // Check for partial errors (some files succeeded, some failed)
+                            if (result.errors && result.errors.length > 0) {
+                                errors.push(...result.errors);
+                            }
+                        } else {
+                            errors.push(`${file.name}: ${result.error}`);
+                            console.error(`Error uploading ${file.name}:`, result.error);
+                        }
                     }
 
                     // Update progress
