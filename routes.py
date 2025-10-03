@@ -326,39 +326,53 @@ def upload_files(collection_id):
         all_chunks = []
         all_chunk_ids = []
         all_metadata = []
-        
+        errors = []
+
         for i, file in enumerate(files):
             if file.filename == '':
                 continue
-            
+
             # Get relative path for directory uploads
             relative_path = request.form.get(f'relativePath_{i}', file.filename)
-            
-            result = _process_uploaded_file(file, collection_id, relative_path)
-            if result[0] is None:
+
+            try:
+                result = _process_uploaded_file(file, collection_id, relative_path)
+                if result[0] is None:
+                    error_msg = result[1] if len(result) > 1 else "Unknown error"
+                    errors.append(f"{file.filename}: {error_msg}")
+                    continue
+
+                document, chunks, chunk_ids, metadata = result
+                processed_docs.append(document)
+                all_chunks.extend(chunks)
+                all_chunk_ids.extend(chunk_ids)
+                all_metadata.extend(metadata)
+            except Exception as file_error:
+                errors.append(f"{file.filename}: {str(file_error)}")
                 continue
-                
-            document, chunks, chunk_ids, metadata = result
-            processed_docs.append(document)
-            all_chunks.extend(chunks)
-            all_chunk_ids.extend(chunk_ids)
-            all_metadata.extend(metadata)
-        
+
         if not processed_docs:
-            return jsonify({'error': 'No supported files could be processed'}), 400
+            error_detail = '; '.join(errors) if errors else 'No supported files could be processed'
+            return jsonify({'error': error_detail}), 400
         
         # Add to vector store
         vector_store.add_document_chunks(collection.name, all_chunks, all_chunk_ids, all_metadata)
-        
+
         # Update collection timestamp
         collection.updated_at = datetime.utcnow()
         db.session.commit()
-        
-        return jsonify({
+
+        response = {
             'success': True,
             'processed_documents': len(processed_docs),
             'collection_id': collection_id
-        })
+        }
+
+        # Include errors if any files failed
+        if errors:
+            response['errors'] = errors
+
+        return jsonify(response)
         
     except Exception as e:
         db.session.rollback()

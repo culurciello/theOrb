@@ -195,6 +195,7 @@ class OrvinApp {
 
     async uploadFilesToCollection(collectionId, files) {
         let successCount = 0;
+        const errors = [];
         for (const file of files) {
             const formData = new FormData();
             formData.append('file', file);
@@ -205,12 +206,22 @@ class OrvinApp {
                     body: formData
                 });
                 const result = await response.json();
-                if (!result.error) successCount++;
+                if (!result.error) {
+                    successCount++;
+                    // Check for partial errors (some files succeeded, some failed)
+                    if (result.errors && result.errors.length > 0) {
+                        errors.push(...result.errors);
+                    }
+                } else {
+                    errors.push(`${file.name}: ${result.error}`);
+                    console.error(`Error uploading ${file.name}:`, result.error);
+                }
             } catch (error) {
+                errors.push(`${file.name}: ${error.message}`);
                 console.error(`Error uploading ${file.name}:`, error);
             }
         }
-        return successCount;
+        return { successCount, errors };
     }
 
     async loadAvailableAgents() {
@@ -686,7 +697,7 @@ class OrvinApp {
         try {
             this.showNotification(`Uploading ${files.length} file(s) to ${collection.name}...`, 'info');
 
-            const successCount = await this.uploadFilesToCollection(collectionId, files);
+            const { successCount, errors } = await this.uploadFilesToCollection(collectionId, files);
 
             if (successCount > 0) {
                 // Clear cached files for this collection to force refresh
@@ -695,9 +706,16 @@ class OrvinApp {
                 await this.loadCollections();
                 this.renderCollections();
                 this.updateSelectors();
-                this.showNotification(`Successfully uploaded ${successCount} file(s) to ${collection.name}`, 'success');
+                const successMsg = `Successfully uploaded ${successCount} file(s) to ${collection.name}`;
+                if (errors.length > 0) {
+                    const errorDetails = `\n\nWarning - Some files failed:\n${errors.join('\n')}`;
+                    this.showNotification(successMsg + errorDetails, 'warning');
+                } else {
+                    this.showNotification(successMsg, 'success');
+                }
             } else {
-                this.showNotification('No files were uploaded successfully', 'error');
+                const errorDetails = errors.length > 0 ? `\n${errors.join('\n')}` : '';
+                this.showNotification(`No files were uploaded successfully${errorDetails}`, 'error');
             }
         } catch (error) {
             console.error('Error uploading files:', error);
@@ -835,15 +853,22 @@ class OrvinApp {
                 this.showNotification(`Uploading ${files.length} file(s) to ${name}...`, 'info');
 
                 try {
-                    const successCount = await this.uploadFilesToCollection(newCollectionId, files);
+                    const { successCount, errors } = await this.uploadFilesToCollection(newCollectionId, files);
 
                     if (successCount > 0) {
                         await this.loadCollections();
                         this.renderCollections();
                         this.updateSelectors();
-                        this.showNotification(`Successfully uploaded ${successCount} file(s) to ${name}`, 'success');
+                        const successMsg = `Successfully uploaded ${successCount} file(s) to ${name}`;
+                        if (errors.length > 0) {
+                            const errorDetails = `\n\nWarning - Some files failed:\n${errors.join('\n')}`;
+                            this.showNotification(successMsg + errorDetails, 'warning');
+                        } else {
+                            this.showNotification(successMsg, 'success');
+                        }
                     } else {
-                        this.showNotification('No files were uploaded successfully', 'error');
+                        const errorDetails = errors.length > 0 ? `\n${errors.join('\n')}` : '';
+                        this.showNotification(`No files were uploaded successfully${errorDetails}`, 'error');
                     }
                 } catch (uploadError) {
                     console.error('Error uploading files:', uploadError);
@@ -1263,6 +1288,7 @@ class OrvinApp {
 
         try {
             let successCount = 0;
+            const errors = [];
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const formData = new FormData();
@@ -1274,12 +1300,22 @@ class OrvinApp {
                         body: formData
                     });
                     const result = await response.json();
-                    if (!result.error) successCount++;
+                    if (!result.error) {
+                        successCount++;
+                        // Check for partial errors (some files succeeded, some failed)
+                        if (result.errors && result.errors.length > 0) {
+                            errors.push(...result.errors);
+                        }
+                    } else {
+                        errors.push(`${file.name}: ${result.error}`);
+                        console.error(`Error uploading ${file.name}:`, result.error);
+                    }
 
                     // Update progress
                     const progress = ((i + 1) / files.length) * 100;
                     this.updateProgressNotification(progressNotification, progress, `Processing ${file.name}...`);
                 } catch (error) {
+                    errors.push(`${file.name}: ${error.message}`);
                     console.error(`Error uploading ${file.name}:`, error);
                 }
             }
@@ -1293,9 +1329,16 @@ class OrvinApp {
                 await this.loadCollections();
                 this.renderCollections();
                 this.updateSelectors();
-                this.showNotification(`Successfully uploaded ${successCount} file(s) to ${collection.name}`, 'success');
+                const successMsg = `Successfully uploaded ${successCount} file(s) to ${collection.name}`;
+                if (errors.length > 0) {
+                    const errorDetails = `\n\nWarning - Some files failed:\n${errors.join('\n')}`;
+                    this.showNotification(successMsg + errorDetails, 'warning');
+                } else {
+                    this.showNotification(successMsg, 'success');
+                }
             } else {
-                this.showNotification('No files were uploaded successfully', 'error');
+                const errorDetails = errors.length > 0 ? `\n${errors.join('\n')}` : '';
+                this.showNotification(`No files were uploaded successfully${errorDetails}`, 'error');
             }
         } catch (error) {
             this.closeProgressNotification(progressNotification);
