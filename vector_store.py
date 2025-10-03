@@ -58,9 +58,11 @@ class VectorStore:
         if self._model is None:
             print(f"\033[96mLoading embedding model: {self.embedding_model}...\033[0m")
             self._tokenizer = AutoTokenizer.from_pretrained(self.embedding_model)
+            # Use float32 on CPU to avoid dtype issues, float16 on GPU for speed
+            model_dtype = torch.float32 if self.device.type == "cpu" else torch.float16
             self._model = AutoModel.from_pretrained(
                 self.embedding_model,
-                dtype=torch.float16 if self.device != "cpu" else torch.float32
+                torch_dtype=model_dtype
             )
             self._model = self._model.to(self.device)
             self._model.eval()
@@ -161,23 +163,29 @@ class VectorStore:
             )
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-            # Forward pass with mixed precision on GPU
-            with torch.amp.autocast('cuda' if self.device.type == "cuda" else 'cpu'):
+            # Forward pass with mixed precision only on GPU
+            if self.device.type == "cuda":
+                with torch.amp.autocast('cuda'):
+                    outputs = self.model(**inputs)
+            else:
+                # CPU/MPS: no autocast to avoid dtype issues
                 outputs = self.model(**inputs)
 
             # Mean pooling
             last_hidden = outputs.last_hidden_state
-            attention_mask = inputs["attention_mask"].unsqueeze(-1)
+            # Ensure attention_mask has same dtype as hidden states to avoid mixed dtype errors
+            attention_mask = inputs["attention_mask"].unsqueeze(-1).to(last_hidden.dtype)
             masked_hidden = last_hidden * attention_mask
             summed = masked_hidden.sum(dim=1)
-            counts = attention_mask.sum(dim=1)
+            counts = attention_mask.sum(dim=1).clamp(min=1e-9)  # Prevent division by zero
             mean_pooled = summed / counts
 
             # Normalize for cosine similarity
-            mean_pooled = mean_pooled / torch.norm(mean_pooled, dim=1, keepdim=True)
+            norms = torch.norm(mean_pooled, dim=1, keepdim=True).clamp(min=1e-9)
+            mean_pooled = mean_pooled / norms
 
-            # Convert to numpy and add to results
-            embeddings.extend(mean_pooled.cpu().float().numpy())
+            # Convert to numpy - ensure float32 dtype
+            embeddings.extend(mean_pooled.cpu().to(torch.float32).numpy())
 
             # Clear GPU cache periodically
             if self.device.type in ["cuda", "mps"] and i % (batch_size * 4) == 0:
