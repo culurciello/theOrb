@@ -120,8 +120,21 @@ class TextPipeline(BasePipeline):
         try:
             if len(text.split()) < 50:
                 return text
-            
-            summary = self.summarizer(text, max_length=150, min_length=50, do_sample=False)
+
+            # Truncate to first 1000 words to avoid BART's max token limit (1024 tokens ~= 750 words)
+            words = text.split()
+            if len(words) > 700:
+                truncated_text = ' '.join(words[:700])
+            else:
+                truncated_text = text
+
+            summary = self.summarizer(
+                truncated_text,
+                max_length=150,
+                min_length=50,
+                do_sample=False,
+                truncation=True  # Enable truncation as safety
+            )
             return summary[0]['summary_text']
         except Exception as e:
             print(f"Error generating summary: {e}")

@@ -208,14 +208,14 @@ class OrvinApp {
 
                 // Check if response is ok
                 if (!response.ok) {
-                    // Try to get error message from response
+                    // Read response as text first to avoid "body locked" error
+                    const text = await response.text();
                     let errorMsg;
                     try {
-                        const result = await response.json();
+                        const result = JSON.parse(text);
                         errorMsg = result.error || `Server error (${response.status})`;
                     } catch {
-                        // Response is not JSON, read as text
-                        const text = await response.text();
+                        // Response is not JSON, use text directly
                         errorMsg = text || `Server error (${response.status})`;
                     }
                     errors.push(`${file.name}: ${errorMsg}`);
@@ -1320,14 +1320,14 @@ class OrvinApp {
 
                     // Check if response is ok
                     if (!response.ok) {
-                        // Try to get error message from response
+                        // Read response as text first to avoid "body locked" error
+                        const text = await response.text();
                         let errorMsg;
                         try {
-                            const result = await response.json();
+                            const result = JSON.parse(text);
                             errorMsg = result.error || `Server error (${response.status})`;
                         } catch {
-                            // Response is not JSON, read as text
-                            const text = await response.text();
+                            // Response is not JSON, use text directly
                             errorMsg = text || `Server error (${response.status})`;
                         }
                         errors.push(`${file.name}: ${errorMsg}`);
