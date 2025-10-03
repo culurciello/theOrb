@@ -128,17 +128,32 @@ class TextPipeline(BasePipeline):
             else:
                 truncated_text = text
 
+            # Ensure text has sufficient length for summarization
+            if len(truncated_text.strip()) < 100:
+                return truncated_text
+
             summary = self.summarizer(
                 truncated_text,
                 max_length=150,
-                min_length=50,
+                min_length=30,  # Reduced min_length to handle shorter texts
                 do_sample=False,
                 truncation=True  # Enable truncation as safety
             )
-            return summary[0]['summary_text']
+
+            # Handle empty summary result
+            if summary and len(summary) > 0 and 'summary_text' in summary[0]:
+                return summary[0]['summary_text']
+            else:
+                # Fallback to first few sentences
+                sentences = truncated_text.split('.')[:3]
+                return '. '.join(sentences) + '.' if sentences else truncated_text[:200]
+
         except Exception as e:
             print(f"Error generating summary: {e}")
-            return text[:500] + "..."
+            # Better fallback - return first few sentences instead of raw text
+            sentences = text.split('.')[:2]
+            fallback = '. '.join(sentences) + '.' if sentences else text[:200]
+            return fallback + "..." if len(fallback) < len(text) else fallback
     
     def _extract_from_pdf(self, file_path: Path) -> str:
         """Extract text from PDF file."""

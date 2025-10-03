@@ -62,7 +62,7 @@ class VectorStore:
             model_dtype = torch.float32 if self.device.type == "cpu" else torch.float16
             self._model = AutoModel.from_pretrained(
                 self.embedding_model,
-                torch_dtype=model_dtype
+                dtype=model_dtype  # Use 'dtype' instead of deprecated 'torch_dtype'
             )
             self._model = self._model.to(self.device)
             self._model.eval()
@@ -133,7 +133,7 @@ class VectorStore:
     @torch.no_grad()
     def batch_embed(self, texts: List[str], batch_size: Optional[int] = None) -> List[np.ndarray]:
         """
-        Optimized batch embedding with GPU acceleration.
+        Optimized batch embedding with GPU acceleration and error handling.
         """
         if batch_size is None:
             # Dynamic batch size based on device
@@ -153,46 +153,107 @@ class VectorStore:
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i+batch_size]
 
-            # Tokenize and move to device
+            try:
+                # Tokenize and move to device with error handling
+                inputs = self.tokenizer(
+                    batch,
+                    padding=True,
+                    truncation=True,
+                    return_tensors="pt",
+                    max_length=512
+                )
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+                # Forward pass with mixed precision only on GPU
+                if self.device.type == "cuda":
+                    with torch.amp.autocast('cuda'):
+                        outputs = self.model(**inputs)
+                else:
+                    # CPU/MPS: no autocast to avoid dtype issues
+                    outputs = self.model(**inputs)
+
+                # Mean pooling
+                last_hidden = outputs.last_hidden_state
+                # Ensure attention_mask has same dtype as hidden states to avoid mixed dtype errors
+                attention_mask = inputs["attention_mask"].unsqueeze(-1).to(last_hidden.dtype)
+                masked_hidden = last_hidden * attention_mask
+                summed = masked_hidden.sum(dim=1)
+                counts = attention_mask.sum(dim=1).clamp(min=1e-9)  # Prevent division by zero
+                mean_pooled = summed / counts
+
+                # Normalize for cosine similarity
+                norms = torch.norm(mean_pooled, dim=1, keepdim=True).clamp(min=1e-9)
+                mean_pooled = mean_pooled / norms
+
+                # Convert to numpy - ensure float32 dtype
+                embeddings.extend(mean_pooled.cpu().to(torch.float32).numpy())
+
+                # Clear GPU cache periodically
+                if self.device.type in ["cuda", "mps"] and i % (batch_size * 4) == 0:
+                    if self.device.type == "cuda":
+                        torch.cuda.empty_cache()
+
+            except RuntimeError as e:
+                if "CUDA" in str(e) and "device-side assert" in str(e):
+                    print(f"CUDA device-side assert detected in vector store, falling back to CPU: {e}")
+                    # Fallback to CPU processing for this batch
+                    cpu_embeddings = self._fallback_cpu_batch_embed(batch)
+                    embeddings.extend(cpu_embeddings)
+                else:
+                    raise e
+            except Exception as e:
+                print(f"Error in batch embed: {e}")
+                # Try CPU fallback
+                cpu_embeddings = self._fallback_cpu_batch_embed(batch)
+                embeddings.extend(cpu_embeddings)
+
+        return embeddings
+
+    def _fallback_cpu_batch_embed(self, texts: List[str]) -> List[np.ndarray]:
+        """Fallback CPU-only embedding generation for a batch."""
+        try:
+            print("Falling back to CPU for vector store embedding generation...")
+
+            # Tokenize (keep on CPU)
             inputs = self.tokenizer(
-                batch,
+                texts,
                 padding=True,
                 truncation=True,
                 return_tensors="pt",
                 max_length=512
             )
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
-            # Forward pass with mixed precision only on GPU
-            if self.device.type == "cuda":
-                with torch.amp.autocast('cuda'):
-                    outputs = self.model(**inputs)
-            else:
-                # CPU/MPS: no autocast to avoid dtype issues
+            # Move model to CPU temporarily if needed
+            original_device = next(self.model.parameters()).device
+            if original_device.type != "cpu":
+                self.model.cpu()
+
+            # Forward pass on CPU
+            with torch.no_grad():
                 outputs = self.model(**inputs)
 
             # Mean pooling
             last_hidden = outputs.last_hidden_state
-            # Ensure attention_mask has same dtype as hidden states to avoid mixed dtype errors
             attention_mask = inputs["attention_mask"].unsqueeze(-1).to(last_hidden.dtype)
             masked_hidden = last_hidden * attention_mask
             summed = masked_hidden.sum(dim=1)
-            counts = attention_mask.sum(dim=1).clamp(min=1e-9)  # Prevent division by zero
+            counts = attention_mask.sum(dim=1).clamp(min=1e-9)
             mean_pooled = summed / counts
 
-            # Normalize for cosine similarity
+            # Normalize
             norms = torch.norm(mean_pooled, dim=1, keepdim=True).clamp(min=1e-9)
             mean_pooled = mean_pooled / norms
 
-            # Convert to numpy - ensure float32 dtype
-            embeddings.extend(mean_pooled.cpu().to(torch.float32).numpy())
+            # Move model back to original device if needed
+            if original_device.type != "cpu":
+                self.model.to(original_device)
 
-            # Clear GPU cache periodically
-            if self.device.type in ["cuda", "mps"] and i % (batch_size * 4) == 0:
-                if self.device.type == "cuda":
-                    torch.cuda.empty_cache()
+            return mean_pooled.to(torch.float32).numpy()
 
-        return embeddings
+        except Exception as e:
+            print(f"CPU fallback also failed: {e}")
+            # Return zero embeddings as last resort
+            return [np.zeros(self.vector_dim, dtype=np.float32) for _ in texts]
 
     def add_document(self, collection_name: str, file_path: str, content: str,
                     summary: str = "", categories: List[str] = None,

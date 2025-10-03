@@ -12,6 +12,9 @@ from database import db
 
 load_dotenv()
 
+# Set CUDA debugging environment variable for better error messages
+os.environ.setdefault('CUDA_LAUNCH_BLOCKING', '1')
+
 # Configure logging
 def setup_logging():
     """Set up application logging to file and console."""

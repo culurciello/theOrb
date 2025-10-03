@@ -57,7 +57,7 @@ class BasePipeline(ABC):
 
     def batch_embed_optimized(self, texts: List[str], batch_size: Optional[int] = None) -> np.ndarray:
         """
-        Optimized batch embedding processing with GPU acceleration.
+        Optimized batch embedding processing with GPU acceleration and error handling.
         Based on kb/ingest.py batch_embed function.
         """
         if not texts:
@@ -66,38 +66,73 @@ class BasePipeline(ABC):
         if batch_size is None:
             batch_size = self.batch_size
 
-        # For small batches, use simple encoding
-        if len(texts) <= batch_size:
-            return self.sentence_model.encode(texts)
+        try:
+            # For small batches, use simple encoding with error handling
+            if len(texts) <= batch_size:
+                return self._safe_encode(texts)
 
-        # For large batches, use optimized processing
-        embeddings = []
-        total_batches = (len(texts) + batch_size - 1) // batch_size
+            # For large batches, use optimized processing
+            embeddings = []
+            total_batches = (len(texts) + batch_size - 1) // batch_size
 
-        if total_batches > 1:
-            print(f"\033[94m  Processing {len(texts)} texts in {total_batches} batches (batch_size={batch_size})...\033[0m")
+            if total_batches > 1:
+                print(f"\033[94m  Processing {len(texts)} texts in {total_batches} batches (batch_size={batch_size})...\033[0m")
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i+batch_size]
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i:i+batch_size]
 
-            # Use SentenceTransformer's optimized encoding
-            batch_embeddings = self.sentence_model.encode(
-                batch,
-                batch_size=len(batch),
+                # Use safe encoding for each batch
+                batch_embeddings = self._safe_encode(batch)
+
+                if batch_embeddings is not None:
+                    if isinstance(batch_embeddings, list):
+                        embeddings.extend(batch_embeddings)
+                    else:
+                        embeddings.append(batch_embeddings)
+
+            # Combine all embeddings
+            if embeddings and isinstance(embeddings[0], np.ndarray):
+                return np.vstack(embeddings)
+            else:
+                return np.array(embeddings)
+
+        except Exception as e:
+            print(f"Error in batch_embed_optimized: {e}")
+            # Fallback to CPU processing
+            return self._fallback_cpu_embedding(texts)
+
+    def _safe_encode(self, texts: List[str]) -> np.ndarray:
+        """Safely encode texts with CUDA error handling."""
+        try:
+            # First try with the configured device
+            return self.sentence_model.encode(
+                texts,
+                batch_size=len(texts),
                 show_progress_bar=False,
                 device=self.device
             )
-
-            if isinstance(batch_embeddings, list):
-                embeddings.extend(batch_embeddings)
+        except RuntimeError as e:
+            if "CUDA" in str(e) and "device-side assert" in str(e):
+                print(f"CUDA device-side assert detected, falling back to CPU: {e}")
+                return self._fallback_cpu_embedding(texts)
             else:
-                embeddings.append(batch_embeddings)
+                raise e
 
-        # Combine all embeddings
-        if embeddings and isinstance(embeddings[0], np.ndarray):
-            return np.vstack(embeddings)
-        else:
-            return np.array(embeddings)
+    def _fallback_cpu_embedding(self, texts: List[str]) -> np.ndarray:
+        """Fallback to CPU-only embedding generation."""
+        try:
+            print("Falling back to CPU for embedding generation...")
+            return self.sentence_model.encode(
+                texts,
+                batch_size=len(texts),
+                show_progress_bar=False,
+                device='cpu'
+            )
+        except Exception as e:
+            print(f"CPU fallback also failed: {e}")
+            # Return zero embeddings as last resort
+            embedding_dim = 384  # all-MiniLM-L6-v2 embedding dimension
+            return np.zeros((len(texts), embedding_dim))
     
     def categorize_content(self, content: str) -> List[str]:
         """Categorize content using keyword matching."""
