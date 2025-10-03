@@ -584,6 +584,8 @@ class OrvinApp {
             // Update conversation ID from response
             if (response.conversation_id) {
                 this.state.currentConversationId = response.conversation_id;
+                // Reload conversations to update history
+                await this.loadConversations();
             }
 
             // Add assistant response
@@ -930,6 +932,9 @@ class OrvinApp {
                 };
             });
 
+            // Set current conversation ID so new messages continue this conversation
+            this.state.currentConversationId = conversationId;
+
             console.log('Loaded conversation:', conversationId, 'with', this.state.chatMessages.length, 'messages');
             this.renderChatMessages();
             this.setActiveTab('collections'); // Switch back to main chat view
@@ -940,6 +945,7 @@ class OrvinApp {
 
             // Clear chat messages on error
             this.state.chatMessages = [];
+            this.state.currentConversationId = null;
         }
     }
 
