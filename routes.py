@@ -1,4 +1,4 @@
-from flask import render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask import render_template, request, jsonify, send_file, redirect, url_for, flash, Response, stream_with_context
 from flask_login import login_user, logout_user, current_user
 from werkzeug.utils import secure_filename
 import os
@@ -377,6 +377,231 @@ def upload_files(collection_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@bp.route('/api/collections/<int:collection_id>/upload-stream', methods=['POST'])
+@login_required
+def upload_files_stream(collection_id):
+    """Upload files with streaming progress updates."""
+    import json
+    import sys
+
+    collection = get_user_collection_or_404(collection_id)
+
+    # Read files BEFORE generator starts (request context issue)
+    files_data = []
+    if 'file' in request.files:
+        # Use getlist to handle multiple files with same key
+        file_list = request.files.getlist('file')
+        for f in file_list:
+            if f.filename != '':
+                # Read file data into memory before generator
+                files_data.append({
+                    'filename': f.filename,
+                    'data': f.read(),
+                    'content_type': f.content_type
+                })
+    elif 'files' in request.files:
+        file_list = request.files.getlist('files')
+        for f in file_list:
+            if f.filename != '':
+                files_data.append({
+                    'filename': f.filename,
+                    'data': f.read(),
+                    'content_type': f.content_type
+                })
+
+    def generate_progress():
+        try:
+            if not files_data:
+                yield f"data: {json.dumps({'error': 'No files provided'})}\n\n"
+                return
+
+            print(f"[UPLOAD-STREAM] Starting upload of {len(files_data)} files", file=sys.stderr)
+            sys.stderr.flush()
+
+            processed_docs = []
+            all_chunks = []
+            all_chunk_ids = []
+            all_metadata = []
+            errors = []
+
+            total_files = len(files_data)
+
+            for file_idx, file_data in enumerate(files_data):
+                filename = file_data['filename']
+                relative_path = filename  # Could be enhanced with form data if needed
+
+                try:
+                    # Progress: Starting file
+                    progress_data = {'step': 'start', 'file': filename, 'progress': file_idx / total_files * 100}
+                    yield f"data: {json.dumps(progress_data)}\n\n"
+                    print(f"[UPLOAD-STREAM] Step: start, file: {filename}", file=sys.stderr)
+                    sys.stderr.flush()
+
+                    # Save file temporarily
+                    from werkzeug.utils import secure_filename
+                    import os, uuid
+                    secure_name = secure_filename(filename)
+                    temp_path = os.path.join('temp', f"{uuid.uuid4()}_{secure_name}")
+                    os.makedirs('temp', exist_ok=True)
+
+                    # Write file data to temp file
+                    with open(temp_path, 'wb') as f:
+                        f.write(file_data['data'])
+
+                    # Progress: Extracting text
+                    yield f"data: {json.dumps({'step': 'extracting', 'file': filename, 'progress': (file_idx + 0.2) / total_files * 100})}\n\n"
+                    sys.stderr.flush()
+
+                    # Process the file
+                    doc_data = document_processor.process_single_file(temp_path)
+                    if not doc_data:
+                        errors.append(f"{filename}: Unsupported file type or processing failed")
+                        yield f"data: {json.dumps({'step': 'error', 'file': filename, 'error': 'Unsupported file type'})}\n\n"
+                        sys.stderr.flush()
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        continue
+
+                    # Progress: Generating summary
+                    yield f"data: {json.dumps({'step': 'summarizing', 'file': filename, 'progress': (file_idx + 0.5) / total_files * 100})}\n\n"
+                    sys.stderr.flush()
+
+                    # Create permanent storage
+                    collection_upload_dir = os.path.join('uploads', f'collection_{collection_id}')
+                    os.makedirs(collection_upload_dir, exist_ok=True)
+                    stored_filename = f"{uuid.uuid4()}_{secure_name}"
+                    stored_file_path = os.path.join(collection_upload_dir, stored_filename)
+
+                    import shutil
+                    shutil.copy2(temp_path, stored_file_path)
+
+                    # Generate access URL
+                    original_file_url = f"/api/files/collection_{collection_id}/{stored_filename}"
+
+                    # Progress: Creating embeddings
+                    yield f"data: {json.dumps({'step': 'embedding', 'file': filename, 'progress': (file_idx + 0.7) / total_files * 100})}\n\n"
+                    sys.stderr.flush()
+
+                    # Create document record
+                    document = Document(
+                        filename=filename,
+                        file_path=relative_path,
+                        stored_file_path=stored_file_path,
+                        original_file_url=original_file_url,
+                        content=doc_data['content'],
+                        summary=doc_data.get('summary', ''),
+                        file_type=doc_data['file_type'],
+                        file_size=doc_data['metadata'].get('file_size', 0),
+                        mime_type=doc_data.get('mime_type'),
+                        collection_id=collection_id
+                    )
+
+                    if doc_data.get('categories'):
+                        document.set_categories(doc_data['categories'])
+                    if doc_data.get('metadata'):
+                        document.set_metadata(doc_data['metadata'])
+
+                    db.session.add(document)
+                    db.session.flush()
+
+                    # Create chunks
+                    chunks = doc_data['chunks']
+                    chunk_records = []
+                    chunk_ids = []
+                    metadata = []
+
+                    for i, chunk_content in enumerate(chunks):
+                        chunk_id = f"doc_{document.id}_chunk_{i}"
+                        chunk = DocumentChunk(
+                            document_id=document.id,
+                            content=chunk_content,
+                            chunk_index=i,
+                            embedding_id=chunk_id
+                        )
+                        chunk_records.append(chunk)
+                        chunk_ids.append(chunk_id)
+                        metadata.append({
+                            'document_id': document.id,
+                            'filename': filename,
+                            'chunk_index': i,
+                            'file_type': doc_data['file_type'],
+                            'categories': ','.join(doc_data.get('categories', [])),
+                            'summary': doc_data.get('summary', ''),
+                            'original_file_url': original_file_url,
+                            'stored_file_path': stored_file_path,
+                            'file_path': relative_path
+                        })
+
+                    db.session.add_all(chunk_records)
+
+                    processed_docs.append(document)
+                    all_chunks.extend(chunks)
+                    all_chunk_ids.extend(chunk_ids)
+                    all_metadata.extend(metadata)
+
+                    # Clean up temp file
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+                    # Progress: File complete
+                    yield f"data: {json.dumps({'step': 'complete', 'file': filename, 'progress': (file_idx + 1) / total_files * 100})}\n\n"
+                    sys.stderr.flush()
+
+                except Exception as file_error:
+                    errors.append(f"{filename}: {str(file_error)}")
+                    yield f"data: {json.dumps({'step': 'error', 'file': filename, 'error': str(file_error)})}\n\n"
+                    sys.stderr.flush()
+                    print(f"[UPLOAD-STREAM] Error processing {filename}: {file_error}", file=sys.stderr)
+                    sys.stderr.flush()
+                    continue
+
+            if not processed_docs:
+                error_detail = '; '.join(errors) if errors else 'No supported files could be processed'
+                yield f"data: {json.dumps({'error': error_detail})}\n\n"
+                sys.stderr.flush()
+                return
+
+            # Progress: Indexing
+            yield f"data: {json.dumps({'step': 'indexing', 'file': 'all', 'progress': 95})}\n\n"
+            sys.stderr.flush()
+            print(f"[UPLOAD-STREAM] Starting indexing for {len(all_chunks)} chunks", file=sys.stderr)
+            sys.stderr.flush()
+
+            # Add to vector store
+            vector_store.add_document_chunks(collection.name, all_chunks, all_chunk_ids, all_metadata)
+
+            # Update collection timestamp
+            collection.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            # Final success message
+            result = {
+                'success': True,
+                'processed_documents': len(processed_docs),
+                'collection_id': collection_id,
+                'progress': 100
+            }
+
+            if errors:
+                result['errors'] = errors
+
+            yield f"data: {json.dumps(result)}\n\n"
+            sys.stderr.flush()
+            print(f"[UPLOAD-STREAM] Upload complete!", file=sys.stderr)
+            sys.stderr.flush()
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"[UPLOAD-STREAM] Fatal error: {e}", file=sys.stderr)
+            sys.stderr.flush()
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            sys.stderr.flush()
+
+    response = Response(stream_with_context(generate_progress()), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
+    return response
 
 @bp.route('/api/conversations', methods=['GET'])
 @login_required
