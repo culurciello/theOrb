@@ -1,0 +1,30 @@
+[Unit]
+Description=TheOrb Gunicorn Application
+After=network.target mysql.service
+
+[Service]
+Type=notify
+# the specific user that our service will run as
+User=ubuntu
+Group=ubuntu
+RuntimeDirectory=gunicorn
+WorkingDirectory=/home/ubuntu/theOrb-web
+Environment="PATH=/home/ubuntu/theOrb-web/venv/bin"
+Environment="MYSQL_USER=orvin"
+Environment="MYSQL_PASSWORD=orvin"
+Environment="MYSQL_HOST=localhost"
+Environment="MYSQL_DATABASE=appdb"
+Environment="SECRET_KEY=your-secret-key-here"
+Environment="BYPASS_AUTH=false"
+ExecStart=/home/ubuntu/theOrb-web/venv/bin/gunicorn \
+    --config /home/ubuntu/theOrb-web/gunicorn_config.py \
+    wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

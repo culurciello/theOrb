@@ -67,6 +67,8 @@ def parse_args():
                         help='Port to run the application on (default: 3000)')
     parser.add_argument('--debug', action='store_true',
                         help='Run in debug mode')
+    parser.add_argument('--run-on-aws', action='store_true',
+                        help='Configure database for AWS RDS')
     return parser.parse_args()
 
 # Parse arguments
@@ -95,8 +97,22 @@ if url_prefix:
     app = Flask(__name__, static_url_path=f'{url_prefix}/static')
 else:
     app = Flask(__name__)
+
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///orb.db')
+
+# MySQL configuration for AWS EC2 (defined globally for logging)
+mysql_user = os.environ.get('MYSQL_USER', 'orvin')
+mysql_password = os.environ.get('MYSQL_PASSWORD', 'orvin')
+mysql_host = os.environ.get('MYSQL_HOST', 'localhost')
+mysql_port = os.environ.get('MYSQL_PORT', '3306')
+mysql_database = os.environ.get('MYSQL_DATABASE', 'appdb')
+
+if not args.run_on_aws:
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///orb.db')
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        f'mysql+mysqlconnector://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_database}'
+    )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Testing and debugging configuration
@@ -162,6 +178,15 @@ def create_user_if_not_exists(username, email, full_name, password='password'):
 
 if __name__ == '__main__':
     with app.app_context():
+        # Log database configuration
+        db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+        if args.run_on_aws:
+            logger.info(f"🗄️  Using MySQL database on AWS EC2")
+            print(f"🗄️  Using MySQL database: {mysql_database}@{mysql_host}")
+        else:
+            logger.info(f"🗄️  Using SQLite database")
+            print(f"🗄️  Using SQLite database: {db_uri.replace('sqlite:///', '')}")
+
         db.create_all()
 
         # If bypass auth is enabled, ensure the specified user exists
