@@ -290,7 +290,7 @@ class VectorStore:
             vector_id = next_vector_id + i
 
             cur.execute("""
-                INSERT INTO chunks
+                INSERT OR REPLACE INTO chunks
                 (chunk_id, doc_id, chunk_order, chunk_text, token_count, vector_id, embedding_model)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (chunk_id, doc_id, i, chunk, len(chunk.split()), vector_id, self.embedding_model))
@@ -635,7 +635,7 @@ class VectorStore:
             vector_id = next_vector_id + i
 
             cur.execute("""
-                INSERT INTO chunks
+                INSERT OR REPLACE INTO chunks
                 (chunk_id, doc_id, chunk_order, chunk_text, token_count, vector_id, embedding_model)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (chunk_id, doc_id, i, chunk, len(chunk.split()), vector_id, self.embedding_model))

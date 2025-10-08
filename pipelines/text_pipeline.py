@@ -136,8 +136,7 @@ class TextPipeline(BasePipeline):
                 truncated_text,
                 max_length=150,
                 min_length=30,  # Reduced min_length to handle shorter texts
-                do_sample=False,
-                truncation=True  # Enable truncation as safety
+                do_sample=False
             )
 
             # Handle empty summary result

@@ -116,6 +116,14 @@ Implemented in Settings is the ability to switch between:
 - vLLM
 	- TBD 
 
+### LLM Tools
+
+We added calculator 
+
+- calculator
+- data and time tool
+- search PubMed
+
 
 
 ## OS X app
