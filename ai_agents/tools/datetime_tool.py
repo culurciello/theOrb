@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from .base_tool import BaseTool
 
 
@@ -35,7 +35,7 @@ class DateTimeTool(BaseTool):
             "required": []
         }
 
-    def execute(self, **kwargs) -> Dict[str, Any]:
+    def execute(self, progress_callback: Optional[Callable] = None, **kwargs) -> Dict[str, Any]:
         try:
             format_type = kwargs.get("format", "human")
             timezone_param = kwargs.get("timezone", "local")

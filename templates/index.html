@@ -178,6 +178,97 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
+
+        /* Loading Overlay for Tool Execution */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-content {
+            background: white;
+            border-radius: 16px;
+            padding: 32px 48px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            animation: fadeInScale 0.3s ease-out;
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #e5e7eb;
+            border-top-color: #8b5cf6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+
+        .loading-message {
+            font-size: 14px;
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 8px;
+        }
+
+        .loading-submessage {
+            font-size: 12px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+
+        /* Dark theme support for loading overlay */
+        [data-theme="dark"] .loading-content {
+            background: #1f2937;
+        }
+
+        [data-theme="dark"] .loading-title {
+            color: #f9fafb;
+        }
+
+        [data-theme="dark"] .loading-message {
+            color: #d1d5db;
+        }
+
+        [data-theme="dark"] .loading-submessage {
+            color: #9ca3af;
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col bg-gray-50">
@@ -440,18 +531,34 @@
                                 <h4 class="font-semibold mb-1">🔬 search_pubmed</h4>
                                 <p class="text-gray-600">Search PubMed, download papers, and automatically create an indexed collection. Auto-generates collection name if not specified.</p>
                             </div>
+                            <div class="border-l-4 border-orange-500 pl-4 py-2">
+                                <h4 class="font-semibold mb-1">📚 search_arxiv</h4>
+                                <p class="text-gray-600">Search arXiv for preprints and papers, download PDFs, and automatically create an indexed collection. Supports advanced query syntax. Auto-generates collection name if not specified.</p>
+                            </div>
                         </div>
                     </div>
 
                     <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-3">Workflow Example</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg text-sm text-gray-700">
-                            <ol class="list-decimal list-inside space-y-2">
-                                <li>Ask agent: "Search PubMed for cancer therapy papers" (or specify collection name)</li>
-                                <li>Agent uses <code class="bg-gray-200 px-1 rounded">search_pubmed</code> tool to download papers and create collection automatically</li>
-                                <li>Papers are downloaded, processed, and indexed (collection name auto-generated if not specified)</li>
-                                <li>Now you can immediately ask questions about the papers in your collection!</li>
-                            </ol>
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Workflow Examples</h3>
+                        <div class="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 space-y-4">
+                            <div>
+                                <h4 class="font-semibold text-gray-900 mb-2">PubMed Search</h4>
+                                <ol class="list-decimal list-inside space-y-1">
+                                    <li>Ask agent: "Search PubMed for cancer therapy papers"</li>
+                                    <li>Agent uses <code class="bg-gray-200 px-1 rounded">search_pubmed</code> tool</li>
+                                    <li>Papers are downloaded, processed, and indexed automatically</li>
+                                    <li>Start asking questions about your collection!</li>
+                                </ol>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-gray-900 mb-2">arXiv Search</h4>
+                                <ol class="list-decimal list-inside space-y-1">
+                                    <li>Ask agent: "Search arXiv for quantum computing papers"</li>
+                                    <li>Agent uses <code class="bg-gray-200 px-1 rounded">search_arxiv</code> tool</li>
+                                    <li>Preprints/papers are downloaded and indexed automatically</li>
+                                    <li>Query your collection for insights!</li>
+                                </ol>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -655,6 +762,16 @@
                     Save Settings
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-title" id="loadingTitle">Processing...</div>
+            <div class="loading-message" id="loadingMessage">Please wait while we process your request</div>
+            <div class="loading-submessage" id="loadingSubmessage">This may take a few moments</div>
         </div>
     </div>
 

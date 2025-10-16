@@ -1,6 +1,6 @@
 import math
 import re
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional, Callable
 from .base_tool import BaseTool
 
 
@@ -97,7 +97,7 @@ class CalculatorTool(BaseTool):
         except Exception as e:
             raise ValueError(f"Invalid mathematical expression: {str(e)}")
 
-    def execute(self, **kwargs) -> Dict[str, Any]:
+    def execute(self, progress_callback: Optional[Callable] = None, **kwargs) -> Dict[str, Any]:
         try:
             expression = kwargs.get("expression")
             precision = kwargs.get("precision", 10)

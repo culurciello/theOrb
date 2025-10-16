@@ -21,8 +21,14 @@ class BaseTool(ABC):
         pass
 
     @abstractmethod
-    def execute(self, **kwargs) -> Dict[str, Any]:
-        """Execute the tool with given parameters and return the result."""
+    def execute(self, progress_callback: Optional[callable] = None, **kwargs) -> Dict[str, Any]:
+        """Execute the tool with given parameters and return the result.
+
+        Args:
+            progress_callback: Optional callback function for progress updates.
+                              Should be called with (status: str, message: str)
+            **kwargs: Tool-specific parameters
+        """
         pass
 
     def validate_parameters(self, parameters: Dict[str, Any]) -> bool:

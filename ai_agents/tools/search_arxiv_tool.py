@@ -1,7 +1,6 @@
 from typing import Dict, Any, List, Optional, Callable
 from .base_tool import BaseTool
-from Bio import Entrez
-import xml.etree.ElementTree as ET
+import arxiv
 import requests
 import os
 import time
@@ -10,20 +9,19 @@ import uuid
 from pathlib import Path
 
 
-class SearchPubmedTool(BaseTool):
-    """Tool for searching PubMed and downloading research papers."""
+class SearchArxivTool(BaseTool):
+    """Tool for searching arXiv and downloading research papers."""
 
     def __init__(self):
-        # Configure Entrez
-        Entrez.email = "euge@purdue.edu"
-        Entrez.api_key = "690a6956d93ebe49169007141de9c3a75c08"
+        # Initialize arXiv client
+        self.client = arxiv.Client()
         self.temp_dir = "temp"
 
     def get_name(self) -> str:
-        return "search_pubmed"
+        return "search_arxiv"
 
     def get_description(self) -> str:
-        return "Search PubMed for research papers, download PDFs/abstracts, and automatically save them to a new collection. Auto-generates collection name if not provided. Use this when you need to find and organize scientific literature."
+        return "Search arXiv for research papers, download PDFs, and automatically save them to a new collection. Auto-generates collection name if not provided. Use this when you need to find and organize arXiv preprints and papers."
 
     def get_parameters(self) -> Dict[str, Any]:
         return {
@@ -31,16 +29,22 @@ class SearchPubmedTool(BaseTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query for PubMed (e.g., 'cancer therapy', 'COVID-19 vaccine')"
+                    "description": "The search query for arXiv (e.g., 'quantum computing', 'machine learning', 'ti:transformers AND cat:cs.AI')"
                 },
                 "collection_name": {
                     "type": "string",
-                    "description": "Optional name for the collection. If not provided, auto-generates as 'pubmed_search_XXX'"
+                    "description": "Optional name for the collection. If not provided, auto-generates as 'arxiv_search_XXX'"
                 },
                 "max_results": {
                     "type": "integer",
                     "description": "Maximum number of papers to retrieve (default: 10, max: 50)",
                     "default": 10
+                },
+                "sort_by": {
+                    "type": "string",
+                    "description": "Sort criterion: 'relevance', 'lastUpdatedDate', or 'submittedDate' (default: 'relevance')",
+                    "default": "relevance",
+                    "enum": ["relevance", "lastUpdatedDate", "submittedDate"]
                 }
             },
             "required": ["query"]
@@ -56,11 +60,12 @@ class SearchPubmedTool(BaseTool):
             query = kwargs.get("query")
             collection_name = kwargs.get("collection_name")
             max_results = min(kwargs.get("max_results", 10), 50)
+            sort_by = kwargs.get("sort_by", "relevance")
 
             if not query:
                 return {"error": "Query parameter is required"}
 
-            notify_progress("pubmed_search", f"Starting PubMed search for: {query[:50]}...")
+            notify_progress("arxiv_search", f"Starting arXiv search for: {query[:50]}...")
 
             # Get user_id from Flask session
             from flask_login import current_user
@@ -78,9 +83,9 @@ class SearchPubmedTool(BaseTool):
                 import re
                 query_short = re.sub(r'[^a-zA-Z0-9_]', '', query_short)
                 timestamp = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
-                collection_name = f"pubmed_search_{query_short}_{timestamp}"
+                collection_name = f"arxiv_search_{query_short}_{timestamp}"
 
-            notify_progress("pubmed_search", "Preparing search environment...")
+            notify_progress("arxiv_search", "Preparing search environment...")
 
             # Clean up temp directory before starting
             if os.path.exists(self.temp_dir):
@@ -88,18 +93,32 @@ class SearchPubmedTool(BaseTool):
 
             # Create unique session directory
             session_id = str(int(time.time()))
-            output_folder = os.path.join(self.temp_dir, f"pubmed_{session_id}")
+            output_folder = os.path.join(self.temp_dir, f"arxiv_{session_id}")
             Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-            # Search PubMed
-            notify_progress("pubmed_search", f"Searching PubMed database (max {max_results} results)...")
-            handle = Entrez.esearch(db="pubmed", term=query, retmax=max_results)
-            record = Entrez.read(handle)
-            pmids = record["IdList"]
-            handle.close()
+            # Map sort_by parameter to arXiv SortCriterion
+            sort_criterion = arxiv.SortCriterion.Relevance
+            if sort_by == "lastUpdatedDate":
+                sort_criterion = arxiv.SortCriterion.LastUpdatedDate
+            elif sort_by == "submittedDate":
+                sort_criterion = arxiv.SortCriterion.SubmittedDate
 
-            if not pmids:
-                notify_progress("pubmed_search", "No papers found for this query")
+            # Search arXiv
+            notify_progress("arxiv_search", f"Searching arXiv database (max {max_results} results)...")
+            search = arxiv.Search(
+                query=query,
+                max_results=max_results,
+                sort_by=sort_criterion
+            )
+
+            try:
+                results = list(self.client.results(search))
+            except Exception as e:
+                notify_progress("arxiv_search", f"Search failed: {str(e)}")
+                return {"error": f"arXiv search failed: {str(e)}"}
+
+            if not results:
+                notify_progress("arxiv_search", "No papers found for this query")
                 return {
                     "success": True,
                     "message": "No papers found for this query",
@@ -107,68 +126,44 @@ class SearchPubmedTool(BaseTool):
                     "output_folder": output_folder
                 }
 
-            notify_progress("pubmed_search", f"Found {len(pmids)} papers! Fetching details...")
-
-            # Get details for all papers
-            xml_data = self._fetch_details(pmids)
-            if not xml_data:
-                notify_progress("pubmed_search", "Failed to fetch paper details")
-                return {"error": "Failed to fetch paper details"}
-
-            notify_progress("pubmed_search", "Parsing paper metadata...")
-            root = ET.fromstring(xml_data)
-            articles = root.findall(".//PubmedArticle")
+            notify_progress("arxiv_search", f"Found {len(results)} papers! Processing...")
 
             papers = []
             pdf_count = 0
             abstract_count = 0
 
-            for i, article in enumerate(articles):
-                pmid = pmids[i]
-
+            for i, result in enumerate(results):
                 # Extract metadata
-                metadata = self._extract_paper_metadata(article, pmid)
+                metadata = self._extract_paper_metadata(result)
                 paper_title = metadata['title'][:60] + "..." if len(metadata['title']) > 60 else metadata['title']
 
-                notify_progress("pubmed_search", f"Processing paper {i+1}/{len(articles)}: {paper_title}")
+                notify_progress("arxiv_search", f"Processing paper {i+1}/{len(results)}: {paper_title}")
 
                 # Try to download PDF
                 pdf_success = False
                 pdf_file = None
                 abstract_file = None
 
-                # 1. Try PMC Open Access
-                notify_progress("pubmed_search", f"[{i+1}/{len(articles)}] Checking PMC Open Access...")
-                pmc_id = self._get_pmc_id(pmid)
-                if pmc_id:
-                    pdf_file = self._download_pdf_from_pmc(pmc_id, pmid, output_folder)
-                    if pdf_file:
-                        pdf_success = True
-                        notify_progress("pubmed_search", f"[{i+1}/{len(articles)}] ✓ Downloaded PDF from PMC")
-
-                # 2. Try Unpaywall (open access repository)
-                if not pdf_success and metadata['doi']:
-                    notify_progress("pubmed_search", f"[{i+1}/{len(articles)}] Checking Unpaywall...")
-                    pdf_file = self._try_unpaywall_pdf(metadata['doi'], pmid, output_folder)
-                    if pdf_file:
-                        pdf_success = True
-                        notify_progress("pubmed_search", f"[{i+1}/{len(articles)}] ✓ Downloaded PDF from Unpaywall")
-
-                # 3. If no PDF available, save abstract
-                if not pdf_success:
-                    notify_progress("pubmed_search", f"[{i+1}/{len(articles)}] PDF not available, saving abstract")
+                notify_progress("arxiv_search", f"[{i+1}/{len(results)}] Downloading PDF from arXiv...")
+                pdf_file = self._download_pdf_from_arxiv(result, output_folder)
+                if pdf_file:
+                    pdf_success = True
+                    pdf_count += 1
+                    notify_progress("arxiv_search", f"[{i+1}/{len(results)}] ✓ Downloaded PDF successfully")
+                else:
+                    # Save abstract if PDF download failed
+                    notify_progress("arxiv_search", f"[{i+1}/{len(results)}] PDF download failed, saving abstract")
                     abstract_file = self._save_abstract_as_text(metadata, output_folder)
                     abstract_count += 1
-                else:
-                    pdf_count += 1
 
                 papers.append({
-                    "pmid": pmid,
+                    "arxiv_id": result.entry_id.split('/')[-1],
                     "title": metadata['title'],
                     "authors": metadata['authors'],
-                    "journal": metadata['journal'],
-                    "year": metadata['year'],
-                    "doi": metadata['doi'],
+                    "categories": metadata['categories'],
+                    "published": metadata['published'],
+                    "updated": metadata['updated'],
+                    "pdf_url": metadata['pdf_url'],
                     "has_pdf": pdf_success,
                     "pdf_file": pdf_file,
                     "abstract_file": abstract_file,
@@ -176,28 +171,28 @@ class SearchPubmedTool(BaseTool):
                 })
 
                 # Be respectful to servers
-                time.sleep(0.5)
+                time.sleep(0.3)
 
             # Now save all downloaded files to a collection
-            notify_progress("pubmed_search", f"Creating collection '{collection_name}'...")
+            notify_progress("arxiv_search", f"Creating collection '{collection_name}'...")
             collection_result = self._save_to_collection(output_folder, collection_name, user_id, notify_progress)
 
             if "error" in collection_result:
-                notify_progress("pubmed_search", f"Error: {collection_result['error']}")
+                notify_progress("arxiv_search", f"Error: {collection_result['error']}")
                 return {
                     "success": False,
                     "error": collection_result["error"],
-                    "papers_downloaded": len(pmids),
+                    "papers_downloaded": len(results),
                     "pdfs_downloaded": pdf_count,
                     "abstracts_saved": abstract_count
                 }
 
-            notify_progress("pubmed_search", f"✓ Complete! Downloaded {pdf_count} PDFs, {abstract_count} abstracts. Collection created with {collection_result.get('files_processed')} documents indexed.")
+            notify_progress("arxiv_search", f"✓ Complete! Downloaded {pdf_count} PDFs, {abstract_count} abstracts. Collection created with {collection_result.get('files_processed')} documents indexed.")
 
             return {
                 "success": True,
                 "query": query,
-                "total_results": len(pmids),
+                "total_results": len(results),
                 "pdfs_downloaded": pdf_count,
                 "abstracts_saved": abstract_count,
                 "collection_id": collection_result.get("collection_id"),
@@ -205,158 +200,58 @@ class SearchPubmedTool(BaseTool):
                 "files_indexed": collection_result.get("files_processed"),
                 "total_chunks": collection_result.get("total_chunks"),
                 "papers": papers,
-                "message": f"Found {len(pmids)} papers, downloaded {pdf_count} PDFs and {abstract_count} abstracts. Created collection '{collection_name}' with {collection_result.get('files_processed')} indexed documents."
+                "message": f"Found {len(results)} papers, downloaded {pdf_count} PDFs and {abstract_count} abstracts. Created collection '{collection_name}' with {collection_result.get('files_processed')} indexed documents."
             }
 
         except Exception as e:
-            notify_progress("pubmed_search", f"Error: {str(e)}")
-            return {"error": f"PubMed search failed: {str(e)}"}
+            notify_progress("arxiv_search", f"Error: {str(e)}")
+            return {"error": f"arXiv search failed: {str(e)}"}
 
-    def _fetch_details(self, id_list):
-        """Fetch paper details from PubMed."""
-        if not id_list:
-            return None
-        ids = ",".join(id_list)
-        handle = Entrez.efetch(
-            db="pubmed",
-            id=ids,
-            rettype="abstract",
-            retmode="xml"
-        )
-        data = handle.read()
-        handle.close()
-        return data
+    def _extract_paper_metadata(self, result: arxiv.Result) -> Dict[str, Any]:
+        """Extract metadata from arXiv result."""
+        return {
+            'title': result.title,
+            'authors': [author.name for author in result.authors],
+            'abstract': result.summary,
+            'published': result.published.strftime("%Y-%m-%d") if result.published else '',
+            'updated': result.updated.strftime("%Y-%m-%d") if result.updated else '',
+            'categories': result.categories,
+            'primary_category': result.primary_category,
+            'pdf_url': result.pdf_url,
+            'entry_id': result.entry_id,
+            'arxiv_id': result.entry_id.split('/')[-1]
+        }
 
-    def _get_pmc_id(self, pmid):
-        """Convert PubMed ID to PMC ID if available."""
+    def _download_pdf_from_arxiv(self, result: arxiv.Result, output_folder: str) -> Optional[str]:
+        """Download PDF from arXiv."""
         try:
-            handle = Entrez.elink(dbfrom="pubmed", db="pmc", id=pmid)
-            record = Entrez.read(handle)
-            handle.close()
+            arxiv_id = result.entry_id.split('/')[-1]
+            # arXiv provides a direct PDF URL
+            pdf_url = result.pdf_url
 
-            if record[0]["LinkSetDb"]:
-                pmc_id = record[0]["LinkSetDb"][0]["Link"][0]["Id"]
-                return pmc_id
-        except:
-            return None
-        return None
-
-    def _download_pdf_from_pmc(self, pmc_id, pmid, output_folder):
-        """Download PDF from PMC Open Access."""
-        try:
-            pmc_pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/PMC{pmc_id}/pdf/"
-
-            response = requests.get(pmc_pdf_url, timeout=30)
+            response = requests.get(pdf_url, timeout=60)
             if response.status_code == 200 and 'application/pdf' in response.headers.get('content-type', ''):
-                filename = os.path.join(output_folder, f"PMID_{pmid}_PMC_{pmc_id}.pdf")
+                # Sanitize filename
+                safe_title = "".join(c for c in result.title[:50] if c.isalnum() or c in (' ', '-', '_')).strip()
+                safe_title = safe_title.replace(' ', '_')
+                filename = os.path.join(output_folder, f"arXiv_{arxiv_id}_{safe_title}.pdf")
+
                 with open(filename, 'wb') as f:
                     f.write(response.content)
                 return filename
         except Exception as e:
+            print(f"Error downloading PDF for {result.entry_id}: {e}")
             pass
         return None
 
-    def _try_unpaywall_pdf(self, doi, pmid, output_folder):
-        """Try getting PDF through Unpaywall API (free, legal open access)."""
-        if not doi:
-            return None
-
-        try:
-            url = f"https://api.unpaywall.org/v2/{doi}?email=euge@purdue.edu"
-            response = requests.get(url, timeout=10)
-
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('is_oa') and data.get('best_oa_location'):
-                    pdf_url = data['best_oa_location'].get('url_for_pdf')
-                    if pdf_url:
-                        pdf_response = requests.get(pdf_url, timeout=30)
-                        if pdf_response.status_code == 200:
-                            filename = os.path.join(output_folder, f"PMID_{pmid}_OA.pdf")
-                            with open(filename, 'wb') as f:
-                                f.write(pdf_response.content)
-                            return filename
-        except Exception as e:
-            pass
-        return None
-
-    def _extract_doi(self, article_xml):
-        """Extract DOI from article XML."""
-        for article_id in article_xml.findall(".//ArticleId"):
-            if article_id.get("IdType") == "doi":
-                return article_id.text
-        return None
-
-    def _extract_paper_metadata(self, article_xml, pmid):
-        """Extract all metadata from article XML."""
-        metadata = {
-            'pmid': pmid,
-            'title': '',
-            'authors': [],
-            'journal': '',
-            'year': '',
-            'doi': '',
-            'abstract': '',
-            'keywords': []
-        }
-
-        # Title
-        title_elem = article_xml.find(".//ArticleTitle")
-        if title_elem is not None:
-            metadata['title'] = ''.join(title_elem.itertext())
-
-        # Authors
-        for author in article_xml.findall(".//Author"):
-            lastname = author.find("LastName")
-            forename = author.find("ForeName")
-            if lastname is not None and forename is not None:
-                metadata['authors'].append(f"{forename.text} {lastname.text}")
-            elif lastname is not None:
-                metadata['authors'].append(lastname.text)
-
-        # Journal
-        journal_elem = article_xml.find(".//Journal/Title")
-        if journal_elem is not None:
-            metadata['journal'] = journal_elem.text
-
-        # Year
-        year_elem = article_xml.find(".//PubDate/Year")
-        if year_elem is not None:
-            metadata['year'] = year_elem.text
-        else:
-            medline_date = article_xml.find(".//PubDate/MedlineDate")
-            if medline_date is not None:
-                metadata['year'] = medline_date.text.split()[0]
-
-        # DOI
-        metadata['doi'] = self._extract_doi(article_xml)
-
-        # Abstract
-        abstract_parts = []
-        for abstract_text in article_xml.findall(".//AbstractText"):
-            label = abstract_text.get("Label", "")
-            text = ''.join(abstract_text.itertext())
-            if label:
-                abstract_parts.append(f"{label}: {text}")
-            else:
-                abstract_parts.append(text)
-        metadata['abstract'] = '\n\n'.join(abstract_parts)
-
-        # Keywords
-        for keyword in article_xml.findall(".//Keyword"):
-            if keyword.text:
-                metadata['keywords'].append(keyword.text)
-
-        return metadata
-
-    def _save_abstract_as_text(self, metadata, output_folder):
+    def _save_abstract_as_text(self, metadata: Dict[str, Any], output_folder: str) -> str:
         """Save abstract and metadata as a formatted text file."""
-        pmid = metadata['pmid']
-        filename = os.path.join(output_folder, f"PMID_{pmid}_abstract.txt")
+        arxiv_id = metadata['arxiv_id']
+        filename = os.path.join(output_folder, f"arXiv_{arxiv_id}_abstract.txt")
 
         with open(filename, 'w', encoding='utf-8') as f:
             f.write("=" * 80 + "\n")
-            f.write(f"PMID: {pmid}\n")
+            f.write(f"arXiv ID: {arxiv_id}\n")
             f.write("=" * 80 + "\n\n")
 
             f.write(f"TITLE:\n{metadata['title']}\n\n")
@@ -364,20 +259,20 @@ class SearchPubmedTool(BaseTool):
             if metadata['authors']:
                 f.write(f"AUTHORS:\n{', '.join(metadata['authors'])}\n\n")
 
-            if metadata['journal']:
-                f.write(f"JOURNAL: {metadata['journal']}")
-                if metadata['year']:
-                    f.write(f" ({metadata['year']})")
+            if metadata['published']:
+                f.write(f"PUBLISHED: {metadata['published']}")
+                if metadata['updated'] and metadata['updated'] != metadata['published']:
+                    f.write(f" (Updated: {metadata['updated']})")
                 f.write("\n\n")
 
-            if metadata['doi']:
-                f.write(f"DOI: {metadata['doi']}\n")
-                f.write(f"URL: https://doi.org/{metadata['doi']}\n\n")
+            if metadata['categories']:
+                f.write(f"CATEGORIES:\n{', '.join(metadata['categories'])}\n")
+                if metadata.get('primary_category'):
+                    f.write(f"Primary: {metadata['primary_category']}\n")
+                f.write("\n")
 
-            f.write(f"PubMed URL: https://pubmed.ncbi.nlm.nih.gov/{pmid}/\n\n")
-
-            if metadata['keywords']:
-                f.write(f"KEYWORDS:\n{', '.join(metadata['keywords'])}\n\n")
+            f.write(f"arXiv URL: https://arxiv.org/abs/{arxiv_id}\n")
+            f.write(f"PDF URL: {metadata['pdf_url']}\n\n")
 
             f.write("ABSTRACT:\n")
             f.write("-" * 80 + "\n")
@@ -401,7 +296,7 @@ class SearchPubmedTool(BaseTool):
                 return {"error": "No files to save to collection"}
 
             if notify_progress:
-                notify_progress("pubmed_search", f"Found {len(all_files)} files to process")
+                notify_progress("arxiv_search", f"Found {len(all_files)} files to process")
 
             # Import Flask dependencies (already in app context from tool execution)
             from models import Collection, Document, DocumentChunk
@@ -417,14 +312,14 @@ class SearchPubmedTool(BaseTool):
                     return {"error": f"Collection '{collection_name}' already exists"}
 
                 if notify_progress:
-                    notify_progress("pubmed_search", "Creating collection in database...")
+                    notify_progress("arxiv_search", "Creating collection in database...")
 
                 # Create collection
                 collection = Collection(
                     user_id=user_id,
                     name=collection_name,
-                    description=f"PubMed papers: {len(all_files)} documents",
-                    source_type='pubmed',
+                    description=f"arXiv papers: {len(all_files)} documents",
+                    source_type='arxiv',
                     source_path=output_folder
                 )
                 db.session.add(collection)
@@ -435,7 +330,7 @@ class SearchPubmedTool(BaseTool):
                 vector_store = VectorStore()
 
                 if notify_progress:
-                    notify_progress("pubmed_search", f"Processing and indexing {len(all_files)} documents...")
+                    notify_progress("arxiv_search", f"Processing and indexing {len(all_files)} documents...")
 
                 # Process all files
                 processed_docs = []
@@ -447,7 +342,7 @@ class SearchPubmedTool(BaseTool):
                     try:
                         if notify_progress:
                             filename = os.path.basename(file_path)
-                            notify_progress("pubmed_search", f"Indexing document {idx+1}/{len(all_files)}: {filename[:40]}...")
+                            notify_progress("arxiv_search", f"Indexing document {idx+1}/{len(all_files)}: {filename[:40]}...")
 
                         result = self._process_file(file_path, collection.id, doc_processor)
                         if result:
@@ -464,7 +359,7 @@ class SearchPubmedTool(BaseTool):
                     return {"error": "No files could be processed"}
 
                 if notify_progress:
-                    notify_progress("pubmed_search", f"Adding {len(all_chunks)} chunks to vector store...")
+                    notify_progress("arxiv_search", f"Adding {len(all_chunks)} chunks to vector store...")
 
                 # Add to vector store
                 vector_store.add_document_chunks(

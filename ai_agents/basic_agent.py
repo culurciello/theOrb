@@ -249,9 +249,9 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
                 else:
                     parameters = {}
 
-                # Execute the tool
+                # Execute the tool (pass the progress callback)
                 logger.info(f"🔧 TOOL CALL | Tool: {tool_name} | Parameters: {parameters}")
-                result = self.tool_manager.execute_tool(tool_name, parameters)
+                result = self.tool_manager.execute_tool(tool_name, parameters, progress_callback=notify_progress)
 
                 if "error" in result:
                     logger.error(f"❌ TOOL ERROR | Tool: {tool_name} | Error: {result['error']}")

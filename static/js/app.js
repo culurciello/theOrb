@@ -323,6 +323,49 @@ class OrvinApp {
         }, 5000);
     }
 
+    showLoadingOverlay(title = 'Processing...', message = 'Please wait while we process your request', submessage = 'This may take a few moments') {
+        const overlay = document.getElementById('loadingOverlay');
+        const titleEl = document.getElementById('loadingTitle');
+        const messageEl = document.getElementById('loadingMessage');
+        const submessageEl = document.getElementById('loadingSubmessage');
+
+        if (overlay) {
+            if (titleEl) titleEl.textContent = title;
+            if (messageEl) messageEl.textContent = message;
+            if (submessageEl) submessageEl.textContent = submessage;
+            overlay.classList.add('active');
+
+            // Disable send button and input
+            const sendButton = document.querySelector('button[onclick="handleSendMessage()"]');
+            const messageInput = document.getElementById('messageInput');
+            if (sendButton) sendButton.disabled = true;
+            if (messageInput) messageInput.disabled = true;
+        }
+    }
+
+    hideLoadingOverlay() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+
+            // Re-enable send button and input
+            const sendButton = document.querySelector('button[onclick="handleSendMessage()"]');
+            const messageInput = document.getElementById('messageInput');
+            if (sendButton) sendButton.disabled = false;
+            if (messageInput) messageInput.disabled = false;
+        }
+    }
+
+    updateLoadingOverlay(title, message, submessage) {
+        const titleEl = document.getElementById('loadingTitle');
+        const messageEl = document.getElementById('loadingMessage');
+        const submessageEl = document.getElementById('loadingSubmessage');
+
+        if (titleEl && title) titleEl.textContent = title;
+        if (messageEl && message) messageEl.textContent = message;
+        if (submessageEl && submessage) submessageEl.textContent = submessage;
+    }
+
     setActiveTab(tabName) {
         this.state.activeTab = tabName;
 
@@ -598,6 +641,23 @@ class OrvinApp {
         messageInput.value = '';
         this.renderChatMessages();
 
+        // Detect if message might trigger a tool
+        const isToolCommand = this.detectToolUsage(messageText);
+
+        if (isToolCommand) {
+            this.showLoadingOverlay(
+                isToolCommand.title,
+                isToolCommand.message,
+                isToolCommand.submessage
+            );
+        } else {
+            this.showLoadingOverlay(
+                'Processing your message...',
+                'The AI is thinking about your question',
+                'This usually takes a few seconds'
+            );
+        }
+
         try {
             // Get active collection
             const activeCollection = this.state.collections.find(c => c.id === this.state.activeCollectionId);
@@ -609,6 +669,9 @@ class OrvinApp {
                 this.state.activeCollectionId,
                 this.state.selectedAgentId
             );
+
+            // Hide loading overlay
+            this.hideLoadingOverlay();
 
             // Update conversation ID from response
             if (response.conversation_id) {
@@ -629,6 +692,9 @@ class OrvinApp {
         } catch (error) {
             console.error('Error sending message:', error);
 
+            // Hide loading overlay
+            this.hideLoadingOverlay();
+
             // Add error message
             const errorMessage = {
                 role: 'assistant',
@@ -638,6 +704,52 @@ class OrvinApp {
             this.state.chatMessages.push(errorMessage);
             this.renderChatMessages();
         }
+    }
+
+    detectToolUsage(message) {
+        const messageLower = message.toLowerCase();
+
+        // Detect PubMed search
+        if (messageLower.includes('search pubmed') || messageLower.includes('pubmed search') ||
+            (messageLower.includes('pubmed') && messageLower.includes('papers'))) {
+            return {
+                title: 'Searching PubMed...',
+                message: 'Searching for research papers and downloading PDFs',
+                submessage: 'This may take 1-2 minutes depending on the number of papers'
+            };
+        }
+
+        // Detect arXiv search
+        if (messageLower.includes('search arxiv') || messageLower.includes('arxiv search') ||
+            (messageLower.includes('arxiv') && (messageLower.includes('papers') || messageLower.includes('preprints')))) {
+            return {
+                title: 'Searching arXiv...',
+                message: 'Searching for preprints and downloading PDFs',
+                submessage: 'This may take 1-2 minutes depending on the number of papers'
+            };
+        }
+
+        // Detect calculation
+        if (messageLower.includes('calculate') || messageLower.includes('compute') ||
+            /\d+\s*[\+\-\*\/]\s*\d+/.test(message)) {
+            return {
+                title: 'Calculating...',
+                message: 'Performing mathematical calculation',
+                submessage: 'This should only take a moment'
+            };
+        }
+
+        // Detect time/date requests
+        if (messageLower.includes('time') || messageLower.includes('date') ||
+            messageLower.includes('what day') || messageLower.includes('current')) {
+            return {
+                title: 'Getting current time...',
+                message: 'Fetching current date and time information',
+                submessage: 'Just a moment...'
+            };
+        }
+
+        return null;
     }
 
 
