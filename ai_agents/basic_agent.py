@@ -267,6 +267,38 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
                         return f"Current date/time: {result['datetime']}"
                 elif tool_name == "calculate":
                     return f"The result is: {result['result']}"
+                elif tool_name == "search_pubmed":
+                    # Clean format for PubMed results
+                    if result.get("success"):
+                        collection_name = result.get("collection_name", "Unknown")
+                        total_results = result.get("total_results", 0)
+                        pdfs = result.get("pdfs_downloaded", 0)
+                        abstracts = result.get("abstracts_saved", 0)
+
+                        return (
+                            f"✓ Created collection '{collection_name}' with {total_results} papers "
+                            f"({pdfs} PDFs, {abstracts} abstracts). "
+                            f"Refresh your collection list and browser to see it."
+                        )
+                    else:
+                        error_msg = result.get("error", "Unknown error")
+                        return f"Failed to create PubMed collection: {error_msg}"
+                elif tool_name == "search_arxiv":
+                    # Clean format for arXiv results
+                    if result.get("success"):
+                        collection_name = result.get("collection_name", "Unknown")
+                        total_results = result.get("total_results", 0)
+                        pdfs = result.get("pdfs_downloaded", 0)
+                        abstracts = result.get("abstracts_saved", 0)
+
+                        return (
+                            f"✓ Created collection '{collection_name}' with {total_results} papers "
+                            f"({pdfs} PDFs, {abstracts} abstracts). "
+                            f"Refresh your collection list and browser to see it."
+                        )
+                    else:
+                        error_msg = result.get("error", "Unknown error")
+                        return f"Failed to create arXiv collection: {error_msg}"
                 else:
                     # Generic formatting for other tools
                     if "result" in result:
