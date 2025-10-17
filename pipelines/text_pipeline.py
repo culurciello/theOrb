@@ -4,6 +4,7 @@ import PyPDF2
 # import docx  # DISABLED: docx functionality commented out (no .docx files in use)
 import markdown
 import re
+import torch
 from transformers import pipeline
 from .base_pipeline import BasePipeline
 
@@ -18,6 +19,8 @@ class TextPipeline(BasePipeline):
     def __init__(self):
         super().__init__()
         self._summarizer = None
+        self._summarizer_device = None
+        self._cuda_failed = False
 
     def _read_text_file_with_encoding_detection(self, file_path: Path) -> str:
         """
@@ -49,12 +52,67 @@ class TextPipeline(BasePipeline):
         except Exception as e:
             raise Exception(f"Could not read text file {file_path} with any encoding: {str(e)}")
     
+    def _clear_cuda_cache(self):
+        """Clear CUDA cache and reset device."""
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            except Exception as e:
+                print(f"Warning: Could not clear CUDA cache: {e}")
+
     @property
     def summarizer(self):
-        """Lazy load the summarizer model."""
+        """Lazy load the summarizer model with proper device handling."""
         if self._summarizer is None:
-            print("Loading BART summarizer for TextPipeline...")
-            self._summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+            try:
+                # Determine device to use
+                if self._cuda_failed:
+                    # CUDA previously failed, use CPU
+                    device = -1  # CPU
+                    device_name = "CPU"
+                    print("⚠️  Using CPU for BART summarizer (CUDA previously failed)")
+                elif torch.cuda.is_available():
+                    device = 0  # First CUDA device
+                    device_name = f"cuda:{device}"
+                    print(f"Loading BART summarizer on {device_name}...")
+                else:
+                    device = -1  # CPU
+                    device_name = "CPU"
+                    print("Loading BART summarizer on CPU (no CUDA available)...")
+
+                # Load model with explicit device
+                self._summarizer = pipeline(
+                    "summarization",
+                    model="facebook/bart-large-cnn",
+                    device=device
+                )
+                self._summarizer_device = device_name
+                print(f"✓ BART summarizer loaded successfully on {device_name}")
+
+            except Exception as e:
+                print(f"❌ Error loading BART summarizer: {e}")
+                # Clear CUDA cache in case of error
+                self._clear_cuda_cache()
+
+                # Try CPU fallback if CUDA failed
+                if device != -1:
+                    print("🔄 Attempting CPU fallback...")
+                    try:
+                        self._summarizer = pipeline(
+                            "summarization",
+                            model="facebook/bart-large-cnn",
+                            device=-1
+                        )
+                        self._summarizer_device = "CPU"
+                        self._cuda_failed = True
+                        print("✓ BART summarizer loaded on CPU (fallback)")
+                    except Exception as cpu_error:
+                        print(f"❌ CPU fallback also failed: {cpu_error}")
+                        raise RuntimeError(f"Failed to load BART summarizer on both GPU and CPU: {e}")
+                else:
+                    raise RuntimeError(f"Failed to load BART summarizer: {e}")
+
         return self._summarizer
     
     def process(self, file_path: str) -> Dict[str, Any]:
@@ -116,43 +174,97 @@ class TextPipeline(BasePipeline):
             raise Exception(f"Error processing {file_ext} file: {str(e)}")
     
     def generate_summary(self, text: str) -> str:
-        """Generate summary from first 1000 words."""
+        """Generate summary from first 1000 words with robust error handling."""
         try:
-            if len(text.split()) < 50:
-                return text
+            # Validate input
+            if not text or len(text.strip()) < 50:
+                return text[:200] if text else ""
 
-            # Truncate to first 1000 words to avoid BART's max token limit (1024 tokens ~= 750 words)
+            # Truncate to avoid BART's max token limit
+            # BART max tokens = 1024, but we'll be conservative and use ~500 words (~700 tokens)
             words = text.split()
-            if len(words) > 700:
-                truncated_text = ' '.join(words[:700])
+            if len(words) > 500:
+                truncated_text = ' '.join(words[:500])
             else:
                 truncated_text = text
 
-            # Ensure text has sufficient length for summarization
-            if len(truncated_text.strip()) < 100:
+            # Clean and validate truncated text
+            truncated_text = truncated_text.strip()
+            if len(truncated_text) < 100:
                 return truncated_text
 
-            summary = self.summarizer(
-                truncated_text,
-                max_length=150,
-                min_length=30,  # Reduced min_length to handle shorter texts
-                do_sample=False
-            )
+            # Additional validation: ensure text isn't too long in characters
+            # BART tokenizer can have issues with very long strings
+            if len(truncated_text) > 3000:
+                truncated_text = truncated_text[:3000]
 
-            # Handle empty summary result
-            if summary and len(summary) > 0 and 'summary_text' in summary[0]:
-                return summary[0]['summary_text']
-            else:
-                # Fallback to first few sentences
+            # Try summarization with CUDA error handling
+            try:
+                summary = self.summarizer(
+                    truncated_text,
+                    max_length=150,
+                    min_length=30,
+                    do_sample=False,
+                    truncation=True  # Explicitly enable truncation
+                )
+
+                # Handle empty summary result
+                if summary and len(summary) > 0 and 'summary_text' in summary[0]:
+                    return summary[0]['summary_text']
+                else:
+                    # Fallback to first few sentences
+                    sentences = truncated_text.split('.')[:3]
+                    return '. '.join(sentences) + '.' if sentences else truncated_text[:200]
+
+            except RuntimeError as cuda_error:
+                error_msg = str(cuda_error).lower()
+
+                # Check if it's a CUDA error
+                if 'cuda' in error_msg or 'device' in error_msg:
+                    print(f"❌ CUDA error during summarization: {cuda_error}")
+                    print("🔄 Clearing CUDA cache and attempting CPU fallback...")
+
+                    # Clear CUDA cache
+                    self._clear_cuda_cache()
+
+                    # Mark CUDA as failed
+                    self._cuda_failed = True
+
+                    # Reset summarizer to force CPU reload
+                    self._summarizer = None
+
+                    # Try again with CPU
+                    try:
+                        print("🔄 Retrying summarization on CPU...")
+                        summary = self.summarizer(
+                            truncated_text,
+                            max_length=150,
+                            min_length=30,
+                            do_sample=False,
+                            truncation=True
+                        )
+
+                        if summary and len(summary) > 0 and 'summary_text' in summary[0]:
+                            return summary[0]['summary_text']
+                    except Exception as retry_error:
+                        print(f"❌ CPU retry also failed: {retry_error}")
+                        # Fall through to fallback
+
+                # Fallback for any error
                 sentences = truncated_text.split('.')[:3]
-                return '. '.join(sentences) + '.' if sentences else truncated_text[:200]
+                fallback = '. '.join(sentences) + '.' if sentences else truncated_text[:200]
+                return fallback
 
         except Exception as e:
-            print(f"Error generating summary: {e}")
+            print(f"❌ Error generating summary: {e}")
             # Better fallback - return first few sentences instead of raw text
-            sentences = text.split('.')[:2]
-            fallback = '. '.join(sentences) + '.' if sentences else text[:200]
-            return fallback + "..." if len(fallback) < len(text) else fallback
+            try:
+                sentences = text.split('.')[:2]
+                fallback = '. '.join(sentences) + '.' if sentences else text[:200]
+                return fallback + "..." if len(fallback) < len(text) else fallback
+            except:
+                # Ultimate fallback
+                return text[:200] if text else "Summary unavailable"
     
     def _extract_from_pdf(self, file_path: Path) -> str:
         """Extract text from PDF file."""

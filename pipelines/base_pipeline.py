@@ -14,17 +14,35 @@ class BasePipeline(ABC):
     
     def __init__(self):
         self._sentence_model = None
+        self._cuda_failed = False
 
         # GPU optimization setup
         self.device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
         self.batch_size = self._get_optimal_batch_size()
+        print(f"📍 BasePipeline initialized with device: {self.device}")
     
+    def _clear_cuda_cache(self):
+        """Clear CUDA cache and reset device."""
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                print("✓ CUDA cache cleared")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not clear CUDA cache: {e}")
+
     @property
     def sentence_model(self):
         """Lazy load the sentence transformer model."""
         if self._sentence_model is None:
             print("Loading SentenceTransformer for pipeline...")
             self._sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+            # If CUDA previously failed, move model to CPU
+            if self._cuda_failed and self.device.type == 'cuda':
+                print("⚠️  CUDA previously failed, using CPU for embeddings")
+                self.device = torch.device('cpu')
+
         return self._sentence_model
     
     @abstractmethod
@@ -112,27 +130,76 @@ class BasePipeline(ABC):
                 device=self.device
             )
         except RuntimeError as e:
-            if "CUDA" in str(e) and "device-side assert" in str(e):
-                print(f"CUDA device-side assert detected, falling back to CPU: {e}")
+            error_msg = str(e)
+            # Check for CUDA errors
+            if "CUDA" in error_msg or "device-side assert" in error_msg or "cuda" in error_msg.lower():
+                print(f"❌ CUDA error detected in embedding generation: {e}")
+                print("🔄 Clearing CUDA cache and switching to CPU...")
+
+                # Clear CUDA cache
+                self._clear_cuda_cache()
+
+                # Mark CUDA as failed and switch to CPU permanently
+                self._cuda_failed = True
+                self.device = torch.device('cpu')
+
+                # Try CPU fallback
                 return self._fallback_cpu_embedding(texts)
             else:
+                # Re-raise non-CUDA errors
                 raise e
+        except Exception as e:
+            # Catch any other errors and try CPU fallback
+            print(f"❌ Unexpected error in embedding generation: {e}")
+            return self._fallback_cpu_embedding(texts)
 
     def _fallback_cpu_embedding(self, texts: List[str]) -> np.ndarray:
-        """Fallback to CPU-only embedding generation."""
+        """Fallback to CPU-only embedding generation with enhanced error handling."""
         try:
-            print("Falling back to CPU for embedding generation...")
-            return self.sentence_model.encode(
+            print("🔄 Falling back to CPU for embedding generation...")
+
+            # Ensure we're using CPU device
+            cpu_device = torch.device('cpu')
+
+            # Try encoding on CPU
+            embeddings = self.sentence_model.encode(
                 texts,
-                batch_size=len(texts),
+                batch_size=min(len(texts), 32),  # Smaller batch size for CPU
                 show_progress_bar=False,
-                device='cpu'
+                device=cpu_device
             )
+            print(f"✓ Successfully generated {len(texts)} embeddings on CPU")
+            return embeddings
+
+        except RuntimeError as e:
+            # Handle any remaining CUDA errors
+            if "cuda" in str(e).lower():
+                print(f"❌ CUDA error persists even on CPU fallback: {e}")
+                # Try one more time with explicit CPU device and smaller batches
+                try:
+                    embeddings = []
+                    for text in texts:
+                        emb = self.sentence_model.encode(
+                            [text],
+                            batch_size=1,
+                            show_progress_bar=False,
+                            device='cpu'
+                        )
+                        embeddings.append(emb[0])
+                    print(f"✓ Generated {len(embeddings)} embeddings one-by-one on CPU")
+                    return np.array(embeddings)
+                except Exception as retry_error:
+                    print(f"❌ Individual encoding also failed: {retry_error}")
+            else:
+                print(f"❌ CPU fallback failed with non-CUDA error: {e}")
+
         except Exception as e:
-            print(f"CPU fallback also failed: {e}")
-            # Return zero embeddings as last resort
-            embedding_dim = 384  # all-MiniLM-L6-v2 embedding dimension
-            return np.zeros((len(texts), embedding_dim))
+            print(f"❌ CPU fallback failed: {e}")
+
+        # Last resort: return zero embeddings
+        print("⚠️  Returning zero embeddings as last resort")
+        embedding_dim = 384  # all-MiniLM-L6-v2 embedding dimension
+        return np.zeros((len(texts), embedding_dim))
     
     def categorize_content(self, content: str) -> List[str]:
         """Categorize content using keyword matching."""
