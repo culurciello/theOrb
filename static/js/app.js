@@ -503,12 +503,16 @@ class OrvinApp {
                         '<p class="text-xs text-gray-500 italic">No files uploaded yet</p>' :
                         `<div class="space-y-1 max-h-40 overflow-y-auto">
                             ${files.map(file => `
-                                <div class="flex items-center justify-between py-1 px-2 bg-white rounded text-xs">
+                                <div
+                                    class="flex items-center justify-between py-1 px-2 bg-white rounded text-xs hover:bg-blue-50 cursor-pointer transition-colors"
+                                    onclick="app.viewDocument(${file.id}, '${(file.filename || file.name).replace(/'/g, "\\'")}', '${file.download_url || ''}'); event.stopPropagation();"
+                                    title="Click to view ${file.filename || file.name}"
+                                >
                                     <div class="flex items-center space-x-2">
                                         <span class="text-gray-600">${this.getFileIcon(this.getFileExtension(file.filename || file.name))}</span>
-                                        <span class="text-gray-900 truncate max-w-32" title="${file.filename || file.name}">${file.filename || file.name}</span>
+                                        <span class="text-blue-600 hover:text-blue-800 truncate max-w-32 font-medium">${file.filename || file.name}</span>
                                     </div>
-                                    <span class="text-gray-500 font-mono">${this.formatFileSize(file.size || file.file_size || 0)}</span>
+                                    <span class="text-gray-500 font-mono">${this.formatFileSize(file.file_size || file.content_length || file.size || 0)}</span>
                                 </div>
                             `).join('')}
                         </div>`
@@ -870,20 +874,6 @@ class OrvinApp {
         `;
     }
 
-    showUploadArea() {
-        const uploadArea = document.getElementById('newCollectionUploadArea');
-        if (uploadArea) {
-            uploadArea.style.display = 'block';
-        }
-    }
-
-    hideUploadArea() {
-        const uploadArea = document.getElementById('newCollectionUploadArea');
-        if (uploadArea) {
-            uploadArea.style.display = 'none';
-        }
-    }
-
     async toggleCollectionDetails(collectionId) {
         const isExpanded = this.state.expandedCollections.has(collectionId);
 
@@ -923,8 +913,8 @@ class OrvinApp {
         const name = nameInput.value.trim();
 
         if (!name) {
-            // If no name is provided, show the upload area to prompt user
-            this.showUploadArea();
+            // If no name is provided, show notification
+            this.showNotification('Please enter a collection name', 'info');
             return;
         }
 
@@ -943,9 +933,6 @@ class OrvinApp {
             const newCollectionId = result.id;
 
             nameInput.value = '';
-            await this.loadCollections();
-            this.renderCollections();
-            this.updateSelectors();
 
             this.showNotification(`Collection "${name}" created successfully!`, 'success');
 
@@ -965,8 +952,14 @@ class OrvinApp {
                 this.resetNewCollectionUploadArea();
             }
 
-            // Hide upload area after successful creation
-            this.hideUploadArea();
+            // Refresh collections list with delay to ensure all operations complete
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list refreshed!', 'success');
+            }, 500);
+
         } catch (error) {
             console.error('Error creating collection:', error);
             this.showNotification(`Error creating collection: ${error.message}`, 'error');
@@ -1623,6 +1616,279 @@ class OrvinApp {
         return filename.split('.').pop()?.toLowerCase() || '';
     }
 
+    // View Document Function
+    viewDocument(documentId, filename, downloadUrl) {
+        try {
+            // Determine the file type
+            const extension = this.getFileExtension(filename).toLowerCase();
+            const isPDF = extension === 'pdf';
+
+            // Build the URL
+            let viewUrl;
+
+            if (isPDF) {
+                // For PDFs, use the document viewer with the document ID
+                viewUrl = `/document-viewer?id=${documentId}`;
+            } else if (downloadUrl) {
+                // For other files, open directly via the download URL
+                viewUrl = downloadUrl;
+            } else {
+                // Fallback: try to construct download URL from document ID
+                this.showNotification('Unable to open document: URL not available', 'error');
+                return;
+            }
+
+            // Open in new window
+            const width = 1000;
+            const height = 800;
+            const left = (screen.width - width) / 2;
+            const top = (screen.height - height) / 2;
+
+            window.open(
+                viewUrl,
+                '_blank',
+                `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=yes`
+            );
+
+            console.log(`Opening document: ${filename} at ${viewUrl}`);
+        } catch (error) {
+            console.error('Error opening document:', error);
+            this.showNotification('Error opening document', 'error');
+        }
+    }
+
+    // Collections Refresh Function
+    async refreshCollectionsList() {
+        try {
+            this.showNotification('Refreshing collections...', 'info');
+            await this.loadCollections();
+            this.renderCollections();
+            this.updateSelectors();
+            this.showNotification('Collections refreshed successfully!', 'success');
+        } catch (error) {
+            console.error('Error refreshing collections:', error);
+            this.showNotification('Error refreshing collections', 'error');
+        }
+    }
+
+    // PubMed Search Modal Functions
+    openPubmedSearchModal() {
+        const modal = document.getElementById('pubmedSearchModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Add click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.closePubmedSearchModal();
+                }
+            };
+        }
+    }
+
+    closePubmedSearchModal() {
+        const modal = document.getElementById('pubmedSearchModal');
+        if (modal) {
+            modal.style.display = 'none';
+            // Clear form
+            document.getElementById('pubmedQuery').value = '';
+            document.getElementById('pubmedCollectionName').value = '';
+            document.getElementById('pubmedMaxResults').value = '10';
+        }
+    }
+
+    async submitPubmedSearch() {
+        const query = document.getElementById('pubmedQuery').value.trim();
+        const collectionName = document.getElementById('pubmedCollectionName').value.trim();
+        const maxResults = parseInt(document.getElementById('pubmedMaxResults').value) || 10;
+
+        if (!query) {
+            this.showNotification('Please enter a search query', 'error');
+            return;
+        }
+
+        // Close modal
+        this.closePubmedSearchModal();
+
+        // Build message to send to agent
+        let message = `Search PubMed for "${query}" with max_results ${maxResults}`;
+        if (collectionName) {
+            message += ` and save to collection named "${collectionName}"`;
+        }
+
+        // Add to chat as user message
+        const userMessage = { role: 'user', text: message };
+        this.state.chatMessages.push(userMessage);
+        this.renderChatMessages();
+
+        // Show loading overlay
+        this.showLoadingOverlay(
+            'Searching PubMed...',
+            'Searching for research papers and downloading PDFs',
+            'This may take 1-2 minutes depending on the number of papers'
+        );
+
+        try {
+            // Send message to agent
+            const response = await this.sendChatMessage(
+                message,
+                this.state.currentConversationId,
+                this.state.activeCollectionId,
+                this.state.selectedAgentId
+            );
+
+            this.hideLoadingOverlay();
+
+            // Update conversation ID
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+                await this.loadConversations();
+            }
+
+            // Add agent response
+            const assistantMessage = {
+                role: 'assistant',
+                text: response.response || 'PubMed search completed.',
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
+            };
+            this.state.chatMessages.push(assistantMessage);
+            this.renderChatMessages();
+
+            // Reload collections to show the new one
+            // Add small delay to ensure backend DB operations complete
+            this.showNotification('Refreshing collection list...', 'info');
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list updated! Check the collections tab.', 'success');
+            }, 1000);
+
+        } catch (error) {
+            this.hideLoadingOverlay();
+            console.error('Error in PubMed search:', error);
+            this.showNotification(`Error: ${error.message}`, 'error');
+
+            const errorMessage = {
+                role: 'assistant',
+                text: 'Sorry, there was an error with the PubMed search. Please try again.',
+                cites: []
+            };
+            this.state.chatMessages.push(errorMessage);
+            this.renderChatMessages();
+        }
+    }
+
+    // arXiv Search Modal Functions
+    openArxivSearchModal() {
+        const modal = document.getElementById('arxivSearchModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Add click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.closeArxivSearchModal();
+                }
+            };
+        }
+    }
+
+    closeArxivSearchModal() {
+        const modal = document.getElementById('arxivSearchModal');
+        if (modal) {
+            modal.style.display = 'none';
+            // Clear form
+            document.getElementById('arxivQuery').value = '';
+            document.getElementById('arxivCollectionName').value = '';
+            document.getElementById('arxivMaxResults').value = '10';
+            document.getElementById('arxivSortBy').value = 'relevance';
+        }
+    }
+
+    async submitArxivSearch() {
+        const query = document.getElementById('arxivQuery').value.trim();
+        const collectionName = document.getElementById('arxivCollectionName').value.trim();
+        const maxResults = parseInt(document.getElementById('arxivMaxResults').value) || 10;
+        const sortBy = document.getElementById('arxivSortBy').value;
+
+        if (!query) {
+            this.showNotification('Please enter a search query', 'error');
+            return;
+        }
+
+        // Close modal
+        this.closeArxivSearchModal();
+
+        // Build message to send to agent
+        let message = `Search arXiv for "${query}" with max_results ${maxResults} and sort_by ${sortBy}`;
+        if (collectionName) {
+            message += ` and save to collection named "${collectionName}"`;
+        }
+
+        // Add to chat as user message
+        const userMessage = { role: 'user', text: message };
+        this.state.chatMessages.push(userMessage);
+        this.renderChatMessages();
+
+        // Show loading overlay
+        this.showLoadingOverlay(
+            'Searching arXiv...',
+            'Searching for preprints and downloading PDFs',
+            'This may take 1-2 minutes depending on the number of papers'
+        );
+
+        try {
+            // Send message to agent
+            const response = await this.sendChatMessage(
+                message,
+                this.state.currentConversationId,
+                this.state.activeCollectionId,
+                this.state.selectedAgentId
+            );
+
+            this.hideLoadingOverlay();
+
+            // Update conversation ID
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+                await this.loadConversations();
+            }
+
+            // Add agent response
+            const assistantMessage = {
+                role: 'assistant',
+                text: response.response || 'arXiv search completed.',
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
+            };
+            this.state.chatMessages.push(assistantMessage);
+            this.renderChatMessages();
+
+            // Reload collections to show the new one
+            // Add small delay to ensure backend DB operations complete
+            this.showNotification('Refreshing collection list...', 'info');
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list updated! Check the collections tab.', 'success');
+            }, 1000);
+
+        } catch (error) {
+            this.hideLoadingOverlay();
+            console.error('Error in arXiv search:', error);
+            this.showNotification(`Error: ${error.message}`, 'error');
+
+            const errorMessage = {
+                role: 'assistant',
+                text: 'Sorry, there was an error with the arXiv search. Please try again.',
+                cites: []
+            };
+            this.state.chatMessages.push(errorMessage);
+            this.renderChatMessages();
+        }
+    }
+
     // Event Listeners
     setupEventListeners() {
         // Message input enter key
@@ -1739,3 +2005,11 @@ window.saveSettings = () => app.handleSaveSettings();
 window.togglePasswordVisibility = (id) => app.togglePasswordVisibility(id);
 window.handleLogout = () => app.handleLogout();
 window.refreshLogs = () => app.refreshLogs();
+window.openPubmedSearchModal = () => app.openPubmedSearchModal();
+window.closePubmedSearchModal = () => app.closePubmedSearchModal();
+window.submitPubmedSearch = () => app.submitPubmedSearch();
+window.openArxivSearchModal = () => app.openArxivSearchModal();
+window.closeArxivSearchModal = () => app.closeArxivSearchModal();
+window.submitArxivSearch = () => app.submitArxivSearch();
+window.refreshCollectionsList = () => app.refreshCollectionsList();
+window.viewDocument = (docId, filename, url) => app.viewDocument(docId, filename, url);

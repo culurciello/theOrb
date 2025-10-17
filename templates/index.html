@@ -402,43 +402,78 @@
             <div class="flex-1 overflow-y-auto p-4">
                 <!-- Collections Tab -->
                 <div id="collectionsContent" class="space-y-6">
-                    <!-- Create Collection -->
+                    <!-- Build Collection -->
                     <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-3">Create New Collection</h3>
-                        <div class="flex space-x-2 mb-4">
-                            <input
-                                type="text"
-                                id="newCollectionName"
-                                placeholder="Collection name..."
-                                class="flex-1 p-2 border border-gray-300 rounded-md text-sm"
-                            />
+                        <h3 class="text-lg font-medium text-gray-900 mb-3">Build Collection</h3>
+
+                        <!-- Quick Build Buttons -->
+                        <div class="grid grid-cols-2 gap-2 mb-4">
                             <button
-                                onclick="handleCreateCollectionClick()"
-                                class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition-colors"
+                                onclick="openPubmedSearchModal()"
+                                class="px-4 py-3 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 transition-colors flex items-center justify-center space-x-2"
                             >
-                                Create
+                                <span>🔬</span>
+                                <span>Search PubMed</span>
+                            </button>
+                            <button
+                                onclick="openArxivSearchModal()"
+                                class="px-4 py-3 bg-orange-600 text-white rounded-md text-sm font-medium hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2"
+                            >
+                                <span>📚</span>
+                                <span>Search arXiv</span>
                             </button>
                         </div>
 
-                        <!-- Upload Area for new collection -->
-                        <div id="newCollectionUploadArea" onclick="triggerFileUploadForNewCollection()" class="upload-area border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer" style="display: none;">
-                            <div class="flex flex-col items-center space-y-2">
-                                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                                <p class="text-sm text-gray-600">
-                                    Drop files here or
-                                    <span class="text-purple-600 hover:underline font-medium">choose files</span>
-                                </p>
-                                <p class="text-xs text-gray-400">Upload files to add to your new collection</p>
-                                <p class="text-xs text-gray-400">PDF, DOC, TXT, MD, CSV, XLS, Images, Videos supported</p>
+                        <!-- Manual Create Section -->
+                        <div class="border-t border-gray-200 pt-4">
+                            <p class="text-sm text-gray-600 mb-3">Or create manually:</p>
+                            <div class="flex space-x-2 mb-4">
+                                <input
+                                    type="text"
+                                    id="newCollectionName"
+                                    placeholder="Collection name..."
+                                    class="flex-1 p-2 border border-gray-300 rounded-md text-sm"
+                                />
+                                <button
+                                    onclick="handleCreateCollectionClick()"
+                                    class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 transition-colors"
+                                >
+                                    Create
+                                </button>
+                            </div>
+
+                            <!-- Upload Area - Always Visible -->
+                            <div id="newCollectionUploadArea" onclick="triggerFileUploadForNewCollection()" class="upload-area border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer">
+                                <div class="flex flex-col items-center space-y-2">
+                                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p class="text-sm text-gray-600">
+                                        Drop files here or
+                                        <span class="text-purple-600 hover:underline font-medium">choose files</span>
+                                    </p>
+                                    <p class="text-xs text-gray-400">Upload files to add to your new collection</p>
+                                    <p class="text-xs text-gray-400">PDF, DOC, TXT, MD, CSV, XLS, Images, Videos supported</p>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Collections List -->
                     <div>
-                        <h3 class="text-lg font-medium text-gray-900 mb-3">Your Collections</h3>
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-lg font-medium text-gray-900">Your Collections</h3>
+                            <button
+                                onclick="refreshCollectionsList()"
+                                class="px-3 py-1 bg-purple-600 text-white rounded-md text-xs hover:bg-purple-700 transition-colors flex items-center space-x-1"
+                                title="Refresh collections list"
+                            >
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Refresh</span>
+                            </button>
+                        </div>
                         <div id="collectionsList" class="space-y-4">
                             <p class="text-gray-500 text-center py-8">No collections yet</p>
                         </div>
@@ -760,6 +795,150 @@
                     class="px-4 py-2 text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors"
                 >
                     Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PubMed Search Modal -->
+    <div id="pubmedSearchModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">🔬 Search PubMed</h2>
+                <button onclick="closePubmedSearchModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Query *</label>
+                    <input
+                        type="text"
+                        id="pubmedQuery"
+                        placeholder="e.g., cancer therapy, COVID-19 vaccine"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Enter keywords or phrases to search for</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Collection Name (optional)</label>
+                    <input
+                        type="text"
+                        id="pubmedCollectionName"
+                        placeholder="Auto-generated if empty"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Leave empty for auto-generated name</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                    <input
+                        type="number"
+                        id="pubmedMaxResults"
+                        value="10"
+                        min="1"
+                        max="50"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Maximum: 50 papers</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+                <button
+                    onclick="closePubmedSearchModal()"
+                    class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="submitPubmedSearch()"
+                    class="px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
+                >
+                    Search PubMed
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- arXiv Search Modal -->
+    <div id="arxivSearchModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">📚 Search arXiv</h2>
+                <button onclick="closeArxivSearchModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Query *</label>
+                    <input
+                        type="text"
+                        id="arxivQuery"
+                        placeholder="e.g., quantum computing, machine learning"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Supports advanced syntax: ti:title, au:author, cat:cs.AI</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Collection Name (optional)</label>
+                    <input
+                        type="text"
+                        id="arxivCollectionName"
+                        placeholder="Auto-generated if empty"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Leave empty for auto-generated name</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                    <input
+                        type="number"
+                        id="arxivMaxResults"
+                        value="10"
+                        min="1"
+                        max="50"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Maximum: 50 papers</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                    <select
+                        id="arxivSortBy"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    >
+                        <option value="relevance">Relevance</option>
+                        <option value="lastUpdatedDate">Last Updated</option>
+                        <option value="submittedDate">Submitted Date</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+                <button
+                    onclick="closeArxivSearchModal()"
+                    class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="submitArxivSearch()"
+                    class="px-4 py-2 text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
+                >
+                    Search arXiv
                 </button>
             </div>
         </div>

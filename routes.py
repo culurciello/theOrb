@@ -247,7 +247,12 @@ def _process_uploaded_file(file, collection_id, relative_path=None):
         
         # Generate access URL
         original_file_url = f"/api/files/collection_{collection_id}/{stored_filename}"
-        
+
+        # Calculate file size: use metadata if available, otherwise use content length
+        metadata_file_size = doc_data['metadata'].get('file_size', 0) if doc_data.get('metadata') else 0
+        content_length = len(doc_data['content']) if doc_data.get('content') else 0
+        calculated_file_size = metadata_file_size if metadata_file_size > 0 else content_length
+
         # Create document record
         document = Document(
             filename=filename,
@@ -257,7 +262,7 @@ def _process_uploaded_file(file, collection_id, relative_path=None):
             content=doc_data['content'],
             summary=doc_data.get('summary', ''),
             file_type=doc_data['file_type'],
-            file_size=doc_data['metadata'].get('file_size', 0),
+            file_size=calculated_file_size,
             mime_type=doc_data.get('mime_type'),
             collection_id=collection_id
         )
@@ -483,6 +488,11 @@ def upload_files_stream(collection_id):
                     yield f"data: {json.dumps({'step': 'embedding', 'file': filename, 'progress': (file_idx + 0.7) / total_files * 100})}\n\n"
                     sys.stderr.flush()
 
+                    # Calculate file size: use metadata if available, otherwise use content length
+                    metadata_file_size = doc_data['metadata'].get('file_size', 0) if doc_data.get('metadata') else 0
+                    content_length = len(doc_data['content']) if doc_data.get('content') else 0
+                    calculated_file_size = metadata_file_size if metadata_file_size > 0 else content_length
+
                     # Create document record
                     document = Document(
                         filename=filename,
@@ -492,7 +502,7 @@ def upload_files_stream(collection_id):
                         content=doc_data['content'],
                         summary=doc_data.get('summary', ''),
                         file_type=doc_data['file_type'],
-                        file_size=doc_data['metadata'].get('file_size', 0),
+                        file_size=calculated_file_size,
                         mime_type=doc_data.get('mime_type'),
                         collection_id=collection_id
                     )
@@ -896,19 +906,23 @@ def get_collection_files(collection_id):
     
     files = []
     for doc in documents:
+        # Use content length as fallback if file_size is 0 or None
+        content_length = len(doc.content) if doc.content else 0
+        file_size = doc.file_size if doc.file_size and doc.file_size > 0 else content_length
+
         files.append({
             'id': doc.id,
             'filename': doc.filename,
             'file_path': doc.file_path,
             'file_type': doc.file_type,
-            'file_size': doc.file_size,
+            'file_size': file_size,
             'mime_type': doc.mime_type,
             'categories': doc.get_categories(),
             'summary': doc.summary,
             'created_at': doc.created_at.isoformat(),
             'download_url': doc.original_file_url,
             'content_preview': doc.content[:200] + '...' if len(doc.content) > 200 else doc.content,
-            'content_length': len(doc.content),
+            'content_length': content_length,
             'chunk_count': len(doc.chunks)
         })
     
