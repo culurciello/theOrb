@@ -16,6 +16,8 @@ class OrvinApp {
             pendingFiles: null,
             expandedCollections: new Set(),
             collectionFiles: {},
+            isDocsExpanded: false,  // Track docs panel expansion state
+            isCollectionsExpanded: false,  // Track collections panel expansion state
             userSettings: {
                 profile: {
                     firstName: '',
@@ -102,20 +104,17 @@ class OrvinApp {
     }
 
     updateThemeToggle() {
-        const lightIcon = document.getElementById('lightIcon');
-        const darkIcon = document.getElementById('darkIcon');
+        const themeIcon = document.getElementById('themeIcon');
         const themeText = document.getElementById('themeText');
 
-        if (lightIcon && darkIcon && themeText) {
+        if (themeIcon && themeText) {
             if (this.state.currentTheme === 'dark') {
-                // Show moon icon, hide sun icon
-                lightIcon.classList.add('hidden');
-                darkIcon.classList.remove('hidden');
+                // Moon icon for dark mode
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />`;
                 themeText.textContent = 'Dark';
             } else {
-                // Show sun icon, hide moon icon
-                lightIcon.classList.remove('hidden');
-                darkIcon.classList.add('hidden');
+                // Sun icon for light mode
+                themeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />`;
                 themeText.textContent = 'Light';
             }
         }
@@ -420,50 +419,94 @@ class OrvinApp {
     }
 
     updateActiveCollectionSelector() {
-        const selector = document.getElementById('activeCollectionSelector');
-        if (!selector) return;
+        const dropdownList = document.getElementById('collectionsDropdownList');
+        if (!dropdownList) return;
 
-        selector.innerHTML = '<option value="">None selected</option>' +
-            this.state.collections.map(collection => {
-                const docCount = collection.document_count || collection.docCount || 0;
-                return `<option value="${collection.id}">${collection.name} (${docCount} documents)</option>`;
-            }).join('');
-
-        if (this.state.activeCollectionId) {
-            selector.value = this.state.activeCollectionId;
-        }
+        dropdownList.innerHTML = this.state.collections.map(collection => {
+            const docCount = collection.document_count || collection.docCount || 0;
+            const isActive = this.state.activeCollectionId === collection.id;
+            return `
+                <button
+                    onclick="handleCollectionChange('${collection.id}')"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors ${isActive ? 'bg-purple-100/50 ring-1 ring-purple-300' : ''}"
+                >
+                    <div class="font-medium">${collection.name}</div>
+                    <div class="text-[10px] text-gray-500">${docCount} documents</div>
+                </button>
+            `;
+        }).join('');
     }
 
     updateAgentSelector() {
-        const selector = document.getElementById('agentSelector');
-        if (!selector) return;
+        const dropdownList = document.getElementById('agentDropdownList');
+        if (!dropdownList) return;
 
-        selector.innerHTML = '<option value="">Default Agent</option>' +
-            this.state.availableAgents.map(agent =>
-                `<option value="${agent.name}">${agent.display_name || agent.name}</option>`
-            ).join('');
+        const agents = this.state.availableAgents || [];
 
-        if (this.state.selectedAgentId) {
-            selector.value = this.state.selectedAgentId;
+        if (agents.length === 0) {
+            dropdownList.innerHTML = `
+                <button
+                    onclick="handleAgentChange('')"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors"
+                >
+                    Default Agent
+                </button>
+            `;
+            return;
         }
+
+        // Add "Default Agent" option first
+        dropdownList.innerHTML = `
+            <button
+                onclick="handleAgentChange('')"
+                class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors ${!this.state.selectedAgentId ? 'bg-purple-100/50 ring-1 ring-purple-300' : ''}"
+            >
+                Default Agent
+            </button>
+        ` + agents.map(agent => {
+            const isActive = this.state.selectedAgentId === agent.name;
+            const displayName = agent.display_name || agent.name;
+            return `
+                <button
+                    onclick="handleAgentChange('${agent.name}')"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors ${isActive ? 'bg-purple-100/50 ring-1 ring-purple-300' : ''}"
+                >
+                    ${displayName}
+                </button>
+            `;
+        }).join('');
     }
 
     updateLLMSelector() {
-        const selector = document.getElementById('llmSelector');
-        if (!selector) return;
+        const dropdownList = document.getElementById('llmDropdownList');
+        if (!dropdownList) return;
 
-        selector.innerHTML = '<option value="">Default LLM</option>';
+        const llmEntries = Object.entries(this.state.availableLLMs);
 
-        Object.entries(this.state.availableLLMs).forEach(([configId, config]) => {
-            const option = document.createElement('option');
-            option.value = configId;
-            option.textContent = config.display_name || configId;
-            selector.appendChild(option);
-        });
-
-        if (this.state.selectedLLMId) {
-            selector.value = this.state.selectedLLMId;
+        if (llmEntries.length === 0) {
+            dropdownList.innerHTML = `
+                <button
+                    onclick="handleLLMChange('')"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors"
+                >
+                    Default Model
+                </button>
+            `;
+            return;
         }
+
+        dropdownList.innerHTML = llmEntries.map(([configId, config]) => {
+            const isActive = this.state.selectedLLMId === configId;
+            const displayName = config.display_name || configId;
+            return `
+                <button
+                    onclick="handleLLMChange('${configId}')"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors ${isActive ? 'bg-purple-100/50 ring-1 ring-purple-300' : ''}"
+                >
+                    ${displayName}
+                </button>
+            `;
+        }).join('');
     }
 
 
@@ -472,7 +515,7 @@ class OrvinApp {
         if (!container) return;
 
         if (this.state.collections.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 text-center py-8">No collections yet</p>';
+            container.innerHTML = '<p class="text-gray-500 text-center py-8 text-xs">No collections yet</p>';
             return;
         }
 
@@ -481,38 +524,36 @@ class OrvinApp {
             const updatedAt = collection.updated_at || collection.updatedAt || collection.created_at;
             const formattedDate = updatedAt ? new Date(updatedAt).toLocaleDateString() : 'Recently';
             const isExpanded = this.state.expandedCollections.has(collection.id);
+            const isActive = this.state.activeCollectionId === collection.id;
             const files = this.state.collectionFiles[collection.id] || [];
 
-            // Generate files list HTML
+            // Generate files list HTML if expanded
             const filesListHTML = isExpanded ? `
-                <div class="mt-3 border-t border-gray-200 pt-3">
-                    <div class="flex items-center justify-between mb-2">
-                        <h5 class="text-sm font-medium text-gray-700">Files in this collection:</h5>
-                        <div class="flex items-center space-x-2">
-                            <span class="text-xs text-gray-500">${files.length} files</span>
-                            <button
-                                onclick="app.triggerFileUpload(${collection.id}); event.stopPropagation();"
-                                class="px-2 py-1 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors"
-                                title="Upload files to this collection"
-                            >
-                                + Upload
-                            </button>
-                        </div>
+                <div class="mt-2 pt-2 border-t border-gray-200/30 space-y-1">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-[10px] text-gray-500">${files.length} files</span>
+                        <button
+                            onclick="app.triggerFileUpload(${collection.id}); event.stopPropagation();"
+                            class="px-2 py-0.5 bg-purple-500/80 text-white text-[10px] rounded hover:bg-purple-600 transition-colors"
+                            title="Upload files"
+                        >
+                            + Upload
+                        </button>
                     </div>
                     ${files.length === 0 ?
-                        '<p class="text-xs text-gray-500 italic">No files uploaded yet</p>' :
-                        `<div class="space-y-1 max-h-40 overflow-y-auto">
+                        '<p class="text-[10px] text-gray-400 italic">No files yet</p>' :
+                        `<div class="space-y-0.5 max-h-32 overflow-y-auto">
                             ${files.map(file => `
                                 <div
-                                    class="flex items-center justify-between py-1 px-2 bg-white rounded text-xs hover:bg-blue-50 cursor-pointer transition-colors"
+                                    class="flex items-center justify-between py-1 px-1.5 bg-white/50 rounded text-[10px] hover:bg-white/80 cursor-pointer transition-colors"
                                     onclick="app.viewDocument(${file.id}, '${(file.filename || file.name).replace(/'/g, "\\'")}', '${file.download_url || ''}'); event.stopPropagation();"
-                                    title="Click to view ${file.filename || file.name}"
+                                    title="Click to view"
                                 >
-                                    <div class="flex items-center space-x-2">
-                                        <span class="text-gray-600">${this.getFileIcon(this.getFileExtension(file.filename || file.name))}</span>
-                                        <span class="text-blue-600 hover:text-blue-800 truncate max-w-32 font-medium">${file.filename || file.name}</span>
+                                    <div class="flex items-center space-x-1 flex-1 min-w-0">
+                                        <span class="text-gray-600 text-xs">${this.getFileIcon(this.getFileExtension(file.filename || file.name))}</span>
+                                        <span class="text-gray-700 truncate">${file.filename || file.name}</span>
                                     </div>
-                                    <span class="text-gray-500 font-mono">${this.formatFileSize(file.file_size || file.content_length || file.size || 0)}</span>
+                                    <span class="text-gray-400 text-[9px] ml-1">${this.formatFileSize(file.file_size || file.content_length || file.size || 0)}</span>
                                 </div>
                             `).join('')}
                         </div>`
@@ -521,41 +562,32 @@ class OrvinApp {
             ` : '';
 
             return `
-                <div class="collection-item bg-gray-50 rounded-lg p-4" data-collection-id="${collection.id}">
-                    <div class="flex items-start justify-between mb-2">
-                        <h4 class="font-medium text-gray-900 cursor-pointer hover:text-purple-600 flex items-center space-x-2" onclick="app.toggleCollectionDetails(${collection.id})">
-                            <span>${collection.name}</span>
-                            <svg class="w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                <div
+                    class="p-3 rounded-xl bg-white/70 border border-gray-200/30 hover:bg-white/90 transition-colors cursor-pointer ${isActive ? 'ring-2 ring-purple-400/50' : ''}"
+                    data-collection-id="${collection.id}"
+                    onclick="app.toggleCollectionDetails(${collection.id})"
+                >
+                    <div class="flex items-start justify-between mb-1">
+                        <div class="flex items-center space-x-2 flex-1 min-w-0">
+                            <span class="text-sm font-light text-black truncate">${collection.name}</span>
+                            <svg class="w-3 h-3 transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
                             </svg>
-                        </h4>
-                        <div class="flex items-center space-x-2">
+                        </div>
+                        <div class="flex items-center space-x-1 flex-shrink-0">
+                            <div class="w-2 h-2 rounded-full ${isActive ? 'bg-green-500' : 'bg-gray-300'}"></div>
                             <button
-                                onclick="app.setActiveCollection(${collection.id})"
-                                class="px-3 py-1 rounded text-sm transition-colors ${
-                                    this.state.activeCollectionId === collection.id
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-white text-gray-700 hover:bg-gray-100'
-                                }"
+                                onclick="app.deleteCollection(${collection.id}); event.stopPropagation();"
+                                class="p-0.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                                title="Delete"
                             >
-                                ${this.state.activeCollectionId === collection.id ? 'Active' : 'Select'}
-                            </button>
-                            <button
-                                onclick="app.deleteCollection(${collection.id})"
-                                class="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Delete collection"
-                            >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                             </button>
                         </div>
                     </div>
-
-                    <p class="text-sm text-gray-600 mb-3">
-                        ${docCount} documents • Updated ${formattedDate}
-                    </p>
-
+                    <div class="text-xs text-gray-500">${docCount} items • ${formattedDate}</div>
                     ${filesListHTML}
                 </div>
             `;
@@ -973,46 +1005,40 @@ class OrvinApp {
         if (!container) return;
 
         if (this.state.conversations.length === 0) {
-            container.innerHTML = '<p class="text-gray-500 text-center py-8">No conversations yet</p>';
+            container.innerHTML = '<div class="text-xs font-light text-gray-400 px-2 py-2 italic">No conversations yet</div>';
             return;
         }
 
         container.innerHTML = this.state.conversations.map(conversation => {
-            const preview = conversation.messages && conversation.messages.length > 0
-                ? conversation.messages[0].content.substring(0, 100) + '...'
-                : 'No messages';
-            const messageCount = conversation.messages ? conversation.messages.length : 0;
-            const formattedDate = new Date(conversation.created_at).toLocaleDateString();
+            const messageCount = conversation.message_count || 0;
+            const formattedDate = new Date(conversation.created_at || conversation.createdAt).toLocaleDateString();
+            const isActive = this.state.currentConversationId === conversation.id;
+
+            // Get first message preview if available
+            let preview = 'Click to load';
+            if (conversation.messages && conversation.messages.length > 0) {
+                preview = conversation.messages[0].content.substring(0, 50) + '...';
+            }
 
             return `
-                <div class="conversation-item bg-gray-50 rounded-lg p-4 hover-lift cursor-pointer">
-                    <div class="flex items-start justify-between mb-2">
-                        <h4 class="font-medium text-gray-900">
-                            ${conversation.title || `Conversation ${conversation.id}`}
-                        </h4>
-                        <div class="flex items-center space-x-2">
-                            <button
-                                onclick="app.loadConversation(${conversation.id})"
-                                class="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-colors"
-                            >
-                                Load
-                            </button>
-                            <button
-                                onclick="app.deleteConversation(${conversation.id})"
-                                class="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            >
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                            </button>
-                        </div>
+                <button
+                    onclick="app.loadConversation(${conversation.id})"
+                    class="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100/50 text-xs font-light text-black transition-colors ${isActive ? 'bg-purple-100/50 ring-1 ring-purple-300' : ''}"
+                >
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-medium truncate flex-1">${conversation.title || 'Conversation ' + conversation.id}</span>
+                        <button
+                            onclick="app.deleteConversation(${conversation.id}); event.stopPropagation();"
+                            class="p-0.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                            title="Delete"
+                        >
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
                     </div>
-                    <p class="text-sm text-gray-600 mb-2">${preview}</p>
-                    <div class="flex items-center justify-between text-xs text-gray-500">
-                        <span>${messageCount} messages</span>
-                        <span>${formattedDate}</span>
-                    </div>
-                </div>
+                    <div class="text-[10px] text-gray-500">${messageCount} messages • ${formattedDate}</div>
+                </button>
             `;
         }).join('');
     }
@@ -1041,8 +1067,16 @@ class OrvinApp {
 
             console.log('Loaded conversation:', conversationId, 'with', this.state.chatMessages.length, 'messages');
             this.renderChatMessages();
-            this.setActiveTab('collections'); // Switch back to main chat view
-            this.showNotification(`Conversation loaded with ${this.state.chatMessages.length} messages`, 'success');
+
+            // Close the dropdown
+            const dropdown = document.getElementById('historyDropdown');
+            if (dropdown) dropdown.style.display = 'none';
+
+            // Find conversation title for notification
+            const conv = this.state.conversations.find(c => c.id === conversationId);
+            const title = conv ? (conv.title || `Conversation ${conversationId}`) : 'Conversation';
+
+            this.showNotification(`Loaded: ${title} (${this.state.chatMessages.length} messages)`, 'success');
         } catch (error) {
             console.error('Error loading conversation:', error);
             this.showNotification(`Failed to load conversation: ${error.message}`, 'error');
@@ -1078,7 +1112,11 @@ class OrvinApp {
         this.state.chatMessages = [];
         this.state.currentConversationId = null;  // Reset conversation ID
         this.renderChatMessages();
-        this.setActiveTab('collections');
+
+        // Close the dropdown
+        const dropdown = document.getElementById('historyDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
         this.showNotification('New conversation started', 'success');
     }
 
@@ -1175,20 +1213,170 @@ class OrvinApp {
         }
     }
 
+    async loadSettingsPanel() {
+        // Load user info
+        await this.loadCurrentUserInfo();
+
+        // Load settings data
+        await this.loadSettings();
+
+        // Populate the UI
+        this.populateSettingsPanel();
+
+        // Update theme toggle
+        this.updateThemeToggle();
+    }
+
+    async loadCurrentUserInfo() {
+        try {
+            // Load user info
+            const userResponse = await fetch('/api/user/current');
+            if (userResponse.ok) {
+                const user = await userResponse.json();
+
+                // Update current user display
+                const usernameEl = document.getElementById('currentUsername');
+                const emailEl = document.getElementById('currentUserEmail');
+
+                if (usernameEl) usernameEl.textContent = user.username || 'User';
+                if (emailEl) emailEl.textContent = user.email || '';
+
+                // Store theme preference
+                if (user.theme_preference) {
+                    this.state.currentTheme = user.theme_preference;
+                }
+            }
+
+            // Load profile info separately
+            const profileResponse = await fetch('/api/user/profile');
+            if (profileResponse.ok) {
+                const profile = await profileResponse.json();
+
+                const firstNameEl = document.getElementById('firstName');
+                const lastNameEl = document.getElementById('lastName');
+                const emailInputEl = document.getElementById('email');
+
+                if (firstNameEl) firstNameEl.value = profile.name || '';
+                if (lastNameEl) lastNameEl.value = profile.lastname || '';
+                if (emailInputEl && !emailInputEl.value) emailInputEl.value = profile.email || '';
+            }
+        } catch (error) {
+            console.error('Error loading user info:', error);
+        }
+    }
+
+    populateSettingsPanel() {
+        // Populate API keys if available
+        const settings = this.state.userSettings;
+
+        const openaiKeyEl = document.getElementById('openaiApiKey');
+        const anthropicKeyEl = document.getElementById('anthropicApiKey');
+        const maxTokensEl = document.getElementById('maxTokens');
+        const temperatureEl = document.getElementById('temperature');
+        const temperatureValueEl = document.getElementById('temperatureValue');
+        const defaultModelEl = document.getElementById('defaultModel');
+
+        if (settings.apiKeys) {
+            if (openaiKeyEl && settings.apiKeys.openai) {
+                openaiKeyEl.value = settings.apiKeys.openai;
+            }
+            if (anthropicKeyEl && settings.apiKeys.anthropic) {
+                anthropicKeyEl.value = settings.apiKeys.anthropic;
+            }
+        }
+
+        if (maxTokensEl && settings.maxTokens) {
+            maxTokensEl.value = settings.maxTokens;
+        }
+
+        if (temperatureEl && settings.temperature !== undefined) {
+            temperatureEl.value = settings.temperature;
+            if (temperatureValueEl) {
+                temperatureValueEl.textContent = settings.temperature;
+            }
+        }
+
+        // Update temperature value display on slider change
+        if (temperatureEl) {
+            temperatureEl.oninput = function() {
+                if (temperatureValueEl) {
+                    temperatureValueEl.textContent = this.value;
+                }
+            };
+        }
+
+        // Populate LLM dropdown
+        if (defaultModelEl) {
+            const llmEntries = Object.entries(this.state.availableLLMs);
+
+            if (llmEntries.length === 0) {
+                defaultModelEl.innerHTML = '<option value="">No models configured</option>';
+            } else {
+                defaultModelEl.innerHTML = '<option value="">Select a model</option>' +
+                    llmEntries.map(([configId, config]) => {
+                        const displayName = config.display_name || configId;
+                        return `<option value="${configId}">${displayName}</option>`;
+                    }).join('');
+
+                // Set current value
+                if (settings.defaultModel) {
+                    defaultModelEl.value = settings.defaultModel;
+                }
+            }
+        }
+    }
+
     async saveSettings() {
         try {
-            const settings = this.state.userSettings;
-            const response = await fetch('/api/settings', {
-                method: 'POST',
+            // Collect all form values
+            const firstName = document.getElementById('firstName')?.value || '';
+            const lastName = document.getElementById('lastName')?.value || '';
+            const email = document.getElementById('email')?.value || '';
+            const openaiKey = document.getElementById('openaiApiKey')?.value || '';
+            const anthropicKey = document.getElementById('anthropicApiKey')?.value || '';
+            const maxTokens = parseInt(document.getElementById('maxTokens')?.value) || 4000;
+            const temperature = parseFloat(document.getElementById('temperature')?.value) || 0.7;
+            const defaultModel = document.getElementById('defaultModel')?.value || '';
+
+            // Update state
+            this.state.userSettings = {
+                ...this.state.userSettings,
+                profile: {
+                    firstName: firstName,
+                    lastName: lastName,
+                    email: email
+                },
+                apiKeys: {
+                    openai: openaiKey,
+                    anthropic: anthropicKey
+                },
+                defaultModel: defaultModel,
+                maxTokens: maxTokens,
+                temperature: temperature
+            };
+
+            // Save profile
+            const profileResponse = await fetch('/api/user/profile', {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settings)
+                body: JSON.stringify({
+                    name: firstName,
+                    lastname: lastName,
+                    email: email
+                })
             });
 
-            if (response.ok) {
+            // Save settings
+            const settingsResponse = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.state.userSettings)
+            });
+
+            if (profileResponse.ok && settingsResponse.ok) {
                 this.showNotification('Settings saved successfully', 'success');
                 // Reload user info to reflect any changes immediately
                 await this.loadCurrentUserInfo();
-                this.closeSettingsModal();
             } else {
                 throw new Error('Failed to save settings');
             }
@@ -1978,6 +2166,279 @@ class OrvinApp {
             }
         }, false);
     }
+
+    // Orb-based UI Management
+    toggleOrbExpansion() {
+        const orbContainer = document.getElementById('orbContainer');
+        const isExpanded = orbContainer.classList.contains('orb-expanded');
+
+        if (isExpanded) {
+            orbContainer.classList.remove('orb-expanded');
+            orbContainer.classList.add('orb-collapsed');
+        } else {
+            orbContainer.classList.add('orb-expanded');
+            orbContainer.classList.remove('orb-collapsed');
+        }
+    }
+
+    togglePanel(panelName, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+
+        const panelId = `${panelName}Panel`;
+        const panel = document.getElementById(panelId);
+        const allPanels = ['docsPanel', 'collectionsPanel', 'voicePanel', 'meetingPanel', 'settingsPanel'];
+        const allButtons = ['docsBtn', 'collectionsBtn', 'voiceBtn', 'meetingBtn', 'settingsBtn'];
+
+        // Close all other panels
+        allPanels.forEach(id => {
+            if (id !== panelId) {
+                document.getElementById(id).style.display = 'none';
+            }
+        });
+
+        // Remove active class from all buttons
+        allButtons.forEach(id => {
+            document.getElementById(id)?.classList.remove('active');
+        });
+
+        // Toggle the selected panel
+        if (panel.style.display === 'none' || !panel.style.display) {
+            panel.style.display = 'block';
+            document.getElementById(`${panelName}Btn`)?.classList.add('active');
+
+            // If opening docs or collections panel, load their data
+            if (panelName === 'docs') {
+                // Chat is already initialized, just ensure collections are loaded in dropdown
+                this.updateSelectors();
+            } else if (panelName === 'collections') {
+                this.loadCollections();
+                this.renderCollections();
+            } else if (panelName === 'settings') {
+                // Load settings when opening settings panel
+                this.loadSettingsPanel();
+            }
+        } else {
+            panel.style.display = 'none';
+            document.getElementById(`${panelName}Btn`)?.classList.remove('active');
+        }
+    }
+
+    toggleDropdown(dropdownName) {
+        const dropdownId = `${dropdownName}Dropdown`;
+        const dropdown = document.getElementById(dropdownId);
+        const allDropdowns = ['historyDropdown', 'collectionsDropdown', 'agentDropdown', 'llmDropdown'];
+
+        // Close all other dropdowns
+        allDropdowns.forEach(id => {
+            if (id !== dropdownId) {
+                const elem = document.getElementById(id);
+                if (elem) elem.style.display = 'none';
+            }
+        });
+
+        // Toggle the selected dropdown
+        if (dropdown) {
+            const isOpening = dropdown.style.display === 'none' || !dropdown.style.display;
+            dropdown.style.display = isOpening ? 'block' : 'none';
+
+            // Load data when opening dropdowns
+            if (isOpening) {
+                if (dropdownName === 'history') {
+                    this.loadConversations().then(() => {
+                        this.renderConversationHistory();
+                    });
+                } else if (dropdownName === 'collections') {
+                    this.updateActiveCollectionSelector();
+                } else if (dropdownName === 'agent') {
+                    this.updateAgentSelector();
+                } else if (dropdownName === 'llm') {
+                    this.updateLLMSelector();
+                }
+            }
+        }
+    }
+
+    handleCollectionChange(collectionId) {
+        const value = collectionId || null;
+        this.state.activeCollectionId = value ? parseInt(value) : null;
+
+        // Update the displayed text
+        const selectedText = document.getElementById('selectedCollectionText');
+        if (selectedText) {
+            if (this.state.activeCollectionId) {
+                const collection = this.state.collections.find(c => c.id === this.state.activeCollectionId);
+                selectedText.textContent = collection ? collection.name : 'All Collections';
+            } else {
+                selectedText.textContent = 'All Collections';
+            }
+        }
+
+        // Close the dropdown
+        const dropdown = document.getElementById('collectionsDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
+        // Re-render to update active state
+        this.updateActiveCollectionSelector();
+
+        this.showNotification(
+            this.state.activeCollectionId
+                ? `Collection "${this.state.collections.find(c => c.id === this.state.activeCollectionId)?.name}" activated`
+                : 'All collections selected',
+            'info'
+        );
+    }
+
+    handleLLMChange(llmId) {
+        this.state.selectedLLMId = llmId || null;
+
+        // Update the displayed text
+        const selectedText = document.getElementById('selectedLLMText');
+        if (selectedText) {
+            if (this.state.selectedLLMId && this.state.availableLLMs[this.state.selectedLLMId]) {
+                const llm = this.state.availableLLMs[this.state.selectedLLMId];
+                selectedText.textContent = llm.display_name || this.state.selectedLLMId;
+            } else {
+                selectedText.textContent = 'AI Model';
+            }
+        }
+
+        // Close the dropdown
+        const dropdown = document.getElementById('llmDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
+        // Re-render to update active state
+        this.updateLLMSelector();
+
+        this.showNotification(
+            this.state.selectedLLMId
+                ? `AI Model "${this.state.availableLLMs[this.state.selectedLLMId]?.display_name || this.state.selectedLLMId}" selected`
+                : 'Default AI Model selected',
+            'info'
+        );
+    }
+
+    handleAgentChange(agentId) {
+        this.state.selectedAgentId = agentId || null;
+
+        // Update the displayed text
+        const selectedText = document.getElementById('selectedAgentText');
+        if (selectedText) {
+            if (this.state.selectedAgentId) {
+                const agent = this.state.availableAgents.find(a => a.name === this.state.selectedAgentId);
+                selectedText.textContent = agent ? (agent.display_name || agent.name) : 'Agent';
+            } else {
+                selectedText.textContent = 'Agent';
+            }
+        }
+
+        // Close the dropdown
+        const dropdown = document.getElementById('agentDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+
+        // Re-render to update active state
+        this.updateAgentSelector();
+
+        this.showNotification(
+            this.state.selectedAgentId
+                ? `Agent "${this.state.availableAgents.find(a => a.name === this.state.selectedAgentId)?.display_name || this.state.selectedAgentId}" selected`
+                : 'Default Agent selected',
+            'info'
+        );
+    }
+
+    toggleDocsExpand() {
+        this.state.isDocsExpanded = !this.state.isDocsExpanded;
+        const panel = document.getElementById('docsPanel');
+        const expandBtn = document.getElementById('docsExpandBtn');
+
+        if (!panel) return;
+
+        if (this.state.isDocsExpanded) {
+            // Expanded state
+            panel.style.bottom = '110px';
+            panel.style.left = '110px';
+            panel.style.right = '4%';
+            panel.style.width = 'auto';
+            panel.style.height = 'calc(100vh - 240px)';
+            panel.style.minHeight = 'calc(100vh - 240px)';
+
+            // Update button icon to collapse icon
+            if (expandBtn) {
+                expandBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                `;
+                expandBtn.title = 'Collapse';
+            }
+        } else {
+            // Collapsed state
+            panel.style.bottom = '110px';
+            panel.style.left = '110px';
+            panel.style.right = 'auto';
+            panel.style.width = '580px';
+            panel.style.height = 'auto';
+            panel.style.minHeight = '520px';
+
+            // Update button icon to expand icon
+            if (expandBtn) {
+                expandBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                `;
+                expandBtn.title = 'Expand';
+            }
+        }
+    }
+
+    toggleCollectionsExpand() {
+        this.state.isCollectionsExpanded = !this.state.isCollectionsExpanded;
+        const panel = document.getElementById('collectionsPanel');
+        const expandBtn = document.getElementById('collectionsExpandBtn');
+
+        if (!panel) return;
+
+        if (this.state.isCollectionsExpanded) {
+            // Expanded state
+            panel.style.bottom = '110px';
+            panel.style.left = '110px';
+            panel.style.right = '4%';
+            panel.style.width = 'auto';
+            panel.style.height = 'calc(100vh - 240px)';
+            panel.style.maxHeight = 'calc(100vh - 240px)';
+
+            // Update button icon to collapse icon
+            if (expandBtn) {
+                expandBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+                    </svg>
+                `;
+                expandBtn.title = 'Collapse';
+            }
+        } else {
+            // Collapsed state
+            panel.style.bottom = '110px';
+            panel.style.left = '110px';
+            panel.style.right = 'auto';
+            panel.style.width = '400px';
+            panel.style.height = 'auto';
+            panel.style.maxHeight = 'calc(100vh - 240px)';
+
+            // Update button icon to expand icon
+            if (expandBtn) {
+                expandBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                    </svg>
+                `;
+                expandBtn.title = 'Expand';
+            }
+        }
+    }
 }
 
 // Initialize app when DOM is ready
@@ -2013,3 +2474,15 @@ window.closeArxivSearchModal = () => app.closeArxivSearchModal();
 window.submitArxivSearch = () => app.submitArxivSearch();
 window.refreshCollectionsList = () => app.refreshCollectionsList();
 window.viewDocument = (docId, filename, url) => app.viewDocument(docId, filename, url);
+
+// New orb-based UI functions
+window.toggleOrbExpansion = () => app.toggleOrbExpansion();
+window.togglePanel = (panelName, event) => app.togglePanel(panelName, event);
+window.toggleDropdown = (dropdownName) => app.toggleDropdown(dropdownName);
+window.handleCollectionChange = (collectionId) => app.handleCollectionChange(collectionId);
+window.toggleDocsExpand = () => app.toggleDocsExpand();
+window.toggleCollectionsExpand = () => app.toggleCollectionsExpand();
+window.startNewConversation = () => app.startNewConversation();
+window.handleLLMChange = (llmId) => app.handleLLMChange(llmId);
+window.handleAgentChange = (agentId) => app.handleAgentChange(agentId);
+window.saveSettings = () => app.saveSettings();
