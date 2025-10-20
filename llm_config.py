@@ -35,8 +35,8 @@ class LLMConfigManager:
         self.configs = {
             "anthropic_large": LLMConfig(
                 provider=LLMProvider.ANTHROPIC,
-                model="claude-sonnet-4-20250514",
-                display_name="Claude Sonnet 4",
+                model="claude-sonnet-4-5-20250929",
+                display_name="Claude Sonnet 4.5",
                 size="large",
                 api_key=os.getenv('ANTHROPIC_API_KEY'),
                 max_tokens=4000,
@@ -45,8 +45,8 @@ class LLMConfigManager:
             ),
             "anthropic_small": LLMConfig(
                 provider=LLMProvider.ANTHROPIC,
-                model="claude-3-5-haiku-20241022",
-                display_name="Claude 3.5 Haiku",
+                model="claude-haiku-4-5-20251001",
+                display_name="Claude 4.5 Haiku",
                 size="small",
                 api_key=os.getenv('ANTHROPIC_API_KEY'),
                 max_tokens=1000,

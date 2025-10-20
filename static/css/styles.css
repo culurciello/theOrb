@@ -1,4 +1,4 @@
-/* Enhanced Orvin Application Styles */
+/* Consolidated Orvin Application Styles */
 
 /* Base variables for themes */
 :root {
@@ -15,14 +15,14 @@
 
 /* Dark theme */
 [data-theme="dark"] {
-    --bg-primary: #1f2937;
-    --bg-secondary: #374151;
-    --bg-tertiary: #4b5563;
-    --text-primary: #f9fafb;
-    --text-secondary: #d1d5db;
-    --text-muted: #9ca3af;
-    --border-color: #4b5563;
-    --border-light: #6b7280;
+    --bg-primary: #0f1419;
+    --bg-secondary: #1a1f2e;
+    --bg-tertiary: #252b3b;
+    --text-primary: #f8f9fa;
+    --text-secondary: #e2e4e9;
+    --text-muted: #a0a8b8;
+    --border-color: #363d52;
+    --border-light: #4a5568;
 }
 
 /* Light theme */
@@ -35,6 +35,343 @@
     --text-muted: #6b7280;
     --border-color: #d1d5db;
     --border-light: #e5e7eb;
+}
+
+/* ==================== ORB-SPECIFIC STYLES ==================== */
+
+/* Orb-based UI Styles */
+.orb-container {
+    position: fixed;
+    bottom: 2rem;
+    left: 2rem;
+    z-index: 100;
+}
+
+/* Purple glow effect for main orb */
+.orb-glow {
+    position: absolute;
+    inset: 0;
+    background: #a855f7;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: 0.4;
+    transform: scale(1.1);
+}
+
+/* Main black orb */
+.main-orb {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    background: #000;
+    border-radius: 50%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid #a855f7;
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(0, 0, 0, 1) 100%);
+}
+
+.main-orb:hover {
+    transform: scale(1.05);
+}
+
+/* Orb icon buttons */
+.orb-icon-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 1rem;
+    backdrop-filter: blur(24px);
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: absolute;
+}
+
+.orb-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 12px 40px rgba(31, 38, 135, 0.25);
+}
+
+.orb-icon-btn.active {
+    ring: 2px;
+    ring-color: #c084fc;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+/* Glassmorphism panel */
+.glass-panel {
+    border-radius: 1.5rem;
+    backdrop-filter: blur(48px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.3) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* Icon expansion animations */
+.orb-icon-vertical {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.orb-icon-horizontal {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.orb-expanded .orb-icon-vertical,
+.orb-expanded .orb-icon-horizontal {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.orb-collapsed .orb-icon-vertical,
+.orb-collapsed .orb-icon-horizontal {
+    opacity: 0;
+    transform: scale(0.8);
+}
+
+/* ==================== DARK MODE ENHANCEMENTS ==================== */
+
+/* Dark mode improvements for buttons and inputs */
+[data-theme="dark"] .glass-panel {
+    background: linear-gradient(135deg,
+        rgba(37, 43, 59, 0.9) 0%,
+        rgba(26, 31, 46, 0.85) 100%);
+    border-color: rgba(139, 92, 246, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(139, 92, 246, 0.1);
+}
+
+[data-theme="dark"] button {
+    color: #f3f4f6;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+    background: rgba(37, 43, 59, 0.8);
+    border-color: rgba(139, 92, 246, 0.2);
+    color: #f8f9fa;
+}
+
+[data-theme="dark"] select {
+    background-color: #252b3b !important;
+    color: #f8f9fa !important;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+[data-theme="dark"] select option {
+    background-color: #252b3b !important;
+    color: #111827 !important;
+    padding: 8px;
+    font-weight: 500;
+}
+
+[data-theme="dark"] select option:hover,
+[data-theme="dark"] select option:checked,
+[data-theme="dark"] select option:focus {
+    background-color: #8b5cf6 !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] input::placeholder {
+    color: #9ca3af;
+}
+
+[data-theme="dark"] .text-gray-700 {
+    color: #d1d5db !important;
+}
+
+[data-theme="dark"] .text-gray-600 {
+    color: #9ca3af !important;
+}
+
+[data-theme="dark"] .text-gray-500 {
+    color: #6b7280 !important;
+}
+
+[data-theme="dark"] .text-black {
+    color: #f9fafb !important;
+}
+
+[data-theme="dark"] .bg-white\/40 {
+    background: rgba(37, 43, 59, 0.6) !important;
+}
+
+[data-theme="dark"] .bg-white\/60 {
+    background: rgba(37, 43, 59, 0.8) !important;
+    border-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+[data-theme="dark"] .border-gray-200\/30 {
+    border-color: rgba(54, 61, 82, 0.4) !important;
+}
+
+[data-theme="dark"] .border-gray-200\/50 {
+    border-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+[data-theme="dark"] .hover\:bg-white\/80:hover {
+    background: rgba(45, 52, 70, 0.9) !important;
+}
+
+/* Enhanced orb icon buttons in dark mode */
+[data-theme="dark"] .orb-icon-btn {
+    background: rgba(37, 43, 59, 0.85);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+[data-theme="dark"] .orb-icon-btn:hover {
+    background: rgba(45, 52, 70, 0.95);
+    border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* Dropdown menus in dark mode */
+[data-theme="dark"] .bg-white\/95 {
+    background: rgba(26, 31, 46, 0.98) !important;
+    backdrop-filter: blur(24px);
+    border-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+[data-theme="dark"] .bg-white\/95 button,
+[data-theme="dark"] .bg-white\/95 .text-black,
+[data-theme="dark"] .bg-white\/95 .text-gray-500,
+[data-theme="dark"] .bg-white\/95 .text-gray-400 {
+    color: #f8f9fa !important;
+}
+
+[data-theme="dark"] .bg-white\/95 .text-xs.text-gray-500,
+[data-theme="dark"] .bg-white\/95 .text-xs.text-gray-400 {
+    color: #a0a8b8 !important;
+}
+
+[data-theme="dark"] .hover\:bg-gray-100\/50:hover {
+    background: rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Purple buttons in dark mode dropdowns */
+[data-theme="dark"] .bg-purple-500\/90 {
+    background: rgba(139, 92, 246, 0.95) !important;
+}
+
+[data-theme="dark"] .hover\:bg-purple-600:hover {
+    background: #7c3aed !important;
+}
+
+/* Loading Overlay for Tool Execution */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(4px);
+}
+
+.loading-overlay.active {
+    display: flex;
+}
+
+.loading-content {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 48px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    animation: fadeInScale 0.3s ease-out;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid #e5e7eb;
+    border-top-color: #8b5cf6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+.loading-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 12px;
+}
+
+.loading-message {
+    font-size: 14px;
+    color: #6b7280;
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+.loading-submessage {
+    font-size: 12px;
+    color: #9ca3af;
+    font-style: italic;
+}
+
+/* Dark theme support for loading overlay */
+[data-theme="dark"] .loading-content {
+    background: #1f2937;
+}
+
+[data-theme="dark"] .loading-title {
+    color: #f9fafb;
+}
+
+[data-theme="dark"] .loading-message {
+    color: #d1d5db;
+}
+
+[data-theme="dark"] .loading-submessage {
+    color: #9ca3af;
+}
+
+/* Message content formatting */
+.message-content p {
+    line-height: 1.5;
+}
+
+.message-content code {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: #d63384;
+}
+
+.message-content li {
+    list-style: none;
+    margin-bottom: 0.25rem;
+}
+
+.message-content strong {
+    font-weight: 600;
+}
+
+.message-content em {
+    font-style: italic;
 }
 
 /* Apply theme variables to elements */
@@ -272,6 +609,47 @@
 .collection-item:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-lg);
+}
+
+/* Dark mode styles for collection items */
+[data-theme="dark"] #collectionsList .text-black {
+    color: #f8f9fa !important;
+}
+
+[data-theme="dark"] #collectionsList .text-gray-700 {
+    color: #e2e4e9 !important;
+}
+
+[data-theme="dark"] #collectionsList .text-gray-600 {
+    color: #d1d5db !important;
+}
+
+[data-theme="dark"] #collectionsList .text-gray-500 {
+    color: #a0a8b8 !important;
+}
+
+[data-theme="dark"] #collectionsList .text-gray-400 {
+    color: #9ca3af !important;
+}
+
+[data-theme="dark"] #collectionsList .bg-white\/70 {
+    background: rgba(37, 43, 59, 0.8) !important;
+}
+
+[data-theme="dark"] #collectionsList .bg-white\/90 {
+    background: rgba(45, 52, 70, 0.9) !important;
+}
+
+[data-theme="dark"] #collectionsList .bg-white\/50 {
+    background: rgba(30, 36, 50, 0.7) !important;
+}
+
+[data-theme="dark"] #collectionsList .bg-white\/80 {
+    background: rgba(40, 47, 65, 0.85) !important;
+}
+
+[data-theme="dark"] #collectionsList .border-gray-200\/30 {
+    border-color: rgba(139, 92, 246, 0.25) !important;
 }
 
 /* Enhanced button styles */

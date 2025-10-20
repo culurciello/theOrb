@@ -124,9 +124,31 @@ app.config['DEFAULT_TEST_USER_ID'] = int(os.environ.get('DEFAULT_TEST_USER_ID', 
 # Set APPLICATION_ROOT to support deployment in subdirectories
 app.config['APPLICATION_ROOT'] = os.environ.get('APPLICATION_ROOT', '/')
 
+# Security configuration
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 50 * 1024 * 1024))  # 50MB default
+
 # Initialize extensions
 db.init_app(app)
-CORS(app)
+
+# Configure CORS with security restrictions
+cors_origins = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000').split(',')
+CORS(app,
+     origins=cors_origins,
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allow_headers=['Content-Type', 'Authorization'],
+     supports_credentials=True,
+     max_age=3600)
+
+# Setup security middleware
+from security_middleware import (
+    setup_security_headers,
+    setup_request_validation,
+    setup_error_handlers
+)
+
+setup_security_headers(app)
+setup_request_validation(app)
+setup_error_handlers(app)
 
 # Initialize Flask-Login
 login_manager = LoginManager()

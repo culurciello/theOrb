@@ -308,8 +308,11 @@ class OrvinApp {
     showNotification(message, type = 'info') {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
+
+        // Sanitize message to prevent XSS
+        const sanitizedMessage = Sanitizer.escapeHTML(message);
         notification.innerHTML = `
-            <span>${message}</span>
+            <span>${sanitizedMessage}</span>
             <button class="close-btn ml-2 text-white hover:text-gray-200" onclick="this.parentElement.remove()">&times;</button>
         `;
 
@@ -1220,8 +1223,8 @@ class OrvinApp {
         // Load settings data
         await this.loadSettings();
 
-        // Populate the UI
-        this.populateSettingsPanel();
+        // Populate the UI (now async to load profile data)
+        await this.populateSettingsPanel();
 
         // Update theme toggle
         this.updateThemeToggle();
@@ -1265,7 +1268,25 @@ class OrvinApp {
         }
     }
 
-    populateSettingsPanel() {
+    async populateSettingsPanel() {
+        // Load profile data first
+        try {
+            const profileResponse = await fetch('/api/user/profile');
+            if (profileResponse.ok) {
+                const profile = await profileResponse.json();
+
+                const firstNameEl = document.getElementById('firstName');
+                const lastNameEl = document.getElementById('lastName');
+                const emailInputEl = document.getElementById('email');
+
+                if (firstNameEl) firstNameEl.value = profile.name || '';
+                if (lastNameEl) lastNameEl.value = profile.lastname || '';
+                if (emailInputEl) emailInputEl.value = profile.email || '';
+            }
+        } catch (error) {
+            console.error('Error loading profile data:', error);
+        }
+
         // Populate API keys if available
         const settings = this.state.userSettings;
 
