@@ -1,7 +1,7 @@
 from typing import Dict, Any, Optional, List
 from .base_agent import BaseAgent
 from vector_store import VectorStore
-from document_processor import DocumentProcessor
+from pipelines.document_processor import DocumentProcessor
 
 class VerificationAgent(BaseAgent):
     def __init__(self, api_key: Optional[str] = None):

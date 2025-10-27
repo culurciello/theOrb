@@ -2098,6 +2098,222 @@ class OrvinApp {
         }
     }
 
+    // LII Search Modal Functions
+    openLIISearchModal() {
+        const modal = document.getElementById('liiSearchModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Add click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.closeLIISearchModal();
+                }
+            };
+        }
+    }
+
+    closeLIISearchModal() {
+        const modal = document.getElementById('liiSearchModal');
+        if (modal) {
+            modal.style.display = 'none';
+            // Clear form
+            document.getElementById('liiQuery').value = '';
+            document.getElementById('liiCollectionName').value = '';
+            document.getElementById('liiMaxResults').value = '5';
+        }
+    }
+
+    async submitLIISearch() {
+        const query = document.getElementById('liiQuery').value.trim();
+        const collectionName = document.getElementById('liiCollectionName').value.trim();
+        const maxResults = parseInt(document.getElementById('liiMaxResults').value) || 5;
+
+        if (!query) {
+            this.showNotification('Please enter a search query', 'error');
+            return;
+        }
+
+        // Close modal
+        this.closeLIISearchModal();
+
+        // Build message to send to agent
+        let message = `Search LII for "${query}" with max_results ${maxResults}`;
+        if (collectionName) {
+            message += ` and save to collection named "${collectionName}"`;
+        }
+
+        // Add to chat as user message
+        const userMessage = { role: 'user', text: message };
+        this.state.chatMessages.push(userMessage);
+        this.renderChatMessages();
+
+        // Show loading overlay
+        this.showLoadingOverlay(
+            'Searching LII...',
+            'Searching Legal Information Institute for legal resources',
+            'This may take 1-2 minutes'
+        );
+
+        try {
+            // Send message to agent
+            const response = await this.sendChatMessage(
+                message,
+                this.state.currentConversationId,
+                this.state.activeCollectionId,
+                this.state.selectedAgentId
+            );
+
+            this.hideLoadingOverlay();
+
+            // Update conversation ID
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+                await this.loadConversations();
+            }
+
+            // Add agent response
+            const assistantMessage = {
+                role: 'assistant',
+                text: response.response || 'LII search completed.',
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
+            };
+            this.state.chatMessages.push(assistantMessage);
+            this.renderChatMessages();
+
+            // Reload collections to show the new one
+            this.showNotification('Refreshing collection list...', 'info');
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list updated! Check the collections tab.', 'success');
+            }, 1000);
+
+        } catch (error) {
+            this.hideLoadingOverlay();
+            console.error('Error in LII search:', error);
+            this.showNotification(`Error: ${error.message}`, 'error');
+
+            const errorMessage = {
+                role: 'assistant',
+                text: 'Sorry, there was an error with the LII search. Please try again.',
+                cites: []
+            };
+            this.state.chatMessages.push(errorMessage);
+            this.renderChatMessages();
+        }
+    }
+
+    // DOAJ Search Modal Functions
+    openDOAJSearchModal() {
+        const modal = document.getElementById('doajSearchModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Add click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.closeDOAJSearchModal();
+                }
+            };
+        }
+    }
+
+    closeDOAJSearchModal() {
+        const modal = document.getElementById('doajSearchModal');
+        if (modal) {
+            modal.style.display = 'none';
+            // Clear form
+            document.getElementById('doajQuery').value = '';
+            document.getElementById('doajCollectionName').value = '';
+            document.getElementById('doajSearchType').value = 'articles';
+            document.getElementById('doajMaxResults').value = '10';
+        }
+    }
+
+    async submitDOAJSearch() {
+        const query = document.getElementById('doajQuery').value.trim();
+        const collectionName = document.getElementById('doajCollectionName').value.trim();
+        const searchType = document.getElementById('doajSearchType').value;
+        const maxResults = parseInt(document.getElementById('doajMaxResults').value) || 10;
+
+        if (!query) {
+            this.showNotification('Please enter a search query', 'error');
+            return;
+        }
+
+        // Close modal
+        this.closeDOAJSearchModal();
+
+        // Build message to send to agent
+        let message = `Search DOAJ for "${query}" with search_type ${searchType} and max_results ${maxResults}`;
+        if (collectionName) {
+            message += ` and save to collection named "${collectionName}"`;
+        }
+
+        // Add to chat as user message
+        const userMessage = { role: 'user', text: message };
+        this.state.chatMessages.push(userMessage);
+        this.renderChatMessages();
+
+        // Show loading overlay
+        this.showLoadingOverlay(
+            'Searching DOAJ...',
+            `Searching Directory of Open Access Journals for ${searchType}`,
+            'This may take 1-2 minutes'
+        );
+
+        try {
+            // Send message to agent
+            const response = await this.sendChatMessage(
+                message,
+                this.state.currentConversationId,
+                this.state.activeCollectionId,
+                this.state.selectedAgentId
+            );
+
+            this.hideLoadingOverlay();
+
+            // Update conversation ID
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+                await this.loadConversations();
+            }
+
+            // Add agent response
+            const assistantMessage = {
+                role: 'assistant',
+                text: response.response || 'DOAJ search completed.',
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
+            };
+            this.state.chatMessages.push(assistantMessage);
+            this.renderChatMessages();
+
+            // Reload collections to show the new one
+            this.showNotification('Refreshing collection list...', 'info');
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list updated! Check the collections tab.', 'success');
+            }, 1000);
+
+        } catch (error) {
+            this.hideLoadingOverlay();
+            console.error('Error in DOAJ search:', error);
+            this.showNotification(`Error: ${error.message}`, 'error');
+
+            const errorMessage = {
+                role: 'assistant',
+                text: 'Sorry, there was an error with the DOAJ search. Please try again.',
+                cites: []
+            };
+            this.state.chatMessages.push(errorMessage);
+            this.renderChatMessages();
+        }
+    }
+
     // Event Listeners
     setupEventListeners() {
         // Message input enter key
@@ -2493,6 +2709,12 @@ window.submitPubmedSearch = () => app.submitPubmedSearch();
 window.openArxivSearchModal = () => app.openArxivSearchModal();
 window.closeArxivSearchModal = () => app.closeArxivSearchModal();
 window.submitArxivSearch = () => app.submitArxivSearch();
+window.openLIISearchModal = () => app.openLIISearchModal();
+window.closeLIISearchModal = () => app.closeLIISearchModal();
+window.submitLIISearch = () => app.submitLIISearch();
+window.openDOAJSearchModal = () => app.openDOAJSearchModal();
+window.closeDOAJSearchModal = () => app.closeDOAJSearchModal();
+window.submitDOAJSearch = () => app.submitDOAJSearch();
 window.refreshCollectionsList = () => app.refreshCollectionsList();
 window.viewDocument = (docId, filename, url) => app.viewDocument(docId, filename, url);
 

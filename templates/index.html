@@ -232,6 +232,14 @@
                         <span>📚</span>
                         <span>Search arXiv</span>
                     </button>
+                    <button onclick="openLIISearchModal()" class="px-4 py-3 bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-800 transition-colors flex items-center justify-center space-x-2">
+                        <span>⚖️</span>
+                        <span>Search LII</span>
+                    </button>
+                    <button onclick="openDOAJSearchModal()" class="px-4 py-3 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center justify-center space-x-2">
+                        <span>🔓</span>
+                        <span>Search DOAJ</span>
+                    </button>
                 </div>
             </div>
 
@@ -817,6 +825,150 @@
                     class="px-4 py-2 text-white bg-orange-600 hover:bg-orange-700 rounded-lg transition-colors"
                 >
                     Search arXiv
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LII Search Modal -->
+    <div id="liiSearchModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">⚖️ Search Legal Information Institute</h2>
+                <button onclick="closeLIISearchModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Query *</label>
+                    <input
+                        type="text"
+                        id="liiQuery"
+                        placeholder="e.g., privacy law, first amendment, copyright"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Search Cornell Law School's Legal Information Institute</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Collection Name (optional)</label>
+                    <input
+                        type="text"
+                        id="liiCollectionName"
+                        placeholder="Auto-generated if empty"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Leave empty for auto-generated name</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                    <input
+                        type="number"
+                        id="liiMaxResults"
+                        value="5"
+                        min="1"
+                        max="20"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Maximum: 20 results</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+                <button
+                    onclick="closeLIISearchModal()"
+                    class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="submitLIISearch()"
+                    class="px-4 py-2 text-white bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors"
+                >
+                    Search LII
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DOAJ Search Modal -->
+    <div id="doajSearchModal" class="modal" style="display: none;">
+        <div class="modal-content bg-white rounded-xl shadow-lg w-full max-w-md mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 class="text-xl font-semibold text-gray-900">🔓 Search DOAJ</h2>
+                <button onclick="closeDOAJSearchModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Query *</label>
+                    <input
+                        type="text"
+                        id="doajQuery"
+                        placeholder="e.g., climate change, machine learning"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Search Directory of Open Access Journals</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Collection Name (optional)</label>
+                    <input
+                        type="text"
+                        id="doajCollectionName"
+                        placeholder="Auto-generated if empty"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Leave empty for auto-generated name</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Search Type</label>
+                    <select
+                        id="doajSearchType"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    >
+                        <option value="articles">Articles</option>
+                        <option value="journals">Journals</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Search for articles or journals</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                    <input
+                        type="number"
+                        id="doajMaxResults"
+                        value="10"
+                        min="1"
+                        max="50"
+                        class="w-full p-3 border border-gray-300 rounded-lg text-sm"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Maximum: 50 results</p>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+                <button
+                    onclick="closeDOAJSearchModal()"
+                    class="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="submitDOAJSearch()"
+                    class="px-4 py-2 text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                >
+                    Search DOAJ
                 </button>
             </div>
         </div>

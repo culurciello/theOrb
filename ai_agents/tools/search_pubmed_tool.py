@@ -406,7 +406,7 @@ class SearchPubmedTool(BaseTool):
             # Import Flask dependencies (already in app context from tool execution)
             from models import Collection, Document, DocumentChunk
             from database import db
-            from document_processor import DocumentProcessor
+            from pipelines.document_processor import DocumentProcessor
             from vector_store import VectorStore
 
             # Already in Flask app context, use existing session
@@ -504,7 +504,7 @@ class SearchPubmedTool(BaseTool):
         filename = os.path.basename(file_path)
 
         # Process the file
-        doc_data = doc_processor.process_single_file(file_path)
+        doc_data = doc_processor.process_file(file_path)
         if not doc_data:
             return None
 

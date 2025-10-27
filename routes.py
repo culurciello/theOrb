@@ -17,7 +17,7 @@ bp = Blueprint('main', __name__)
 # We'll register this blueprint with the app in app.py
 from database import db
 from models import Collection, Document, DocumentChunk, Conversation, Message, UserProfile, ApiKey, User
-from document_processor import DocumentProcessor
+from pipelines.document_processor import DocumentProcessor
 from vector_store import VectorStore
 from ai_agents import AgentManager
 from ai_agents.verification_agent import VerificationAgent
@@ -232,7 +232,7 @@ def _process_uploaded_file(file, collection_id, relative_path=None):
     
     try:
         # Process the file
-        doc_data = document_processor.process_single_file(temp_path)
+        doc_data = document_processor.process_file(temp_path)
         if not doc_data:
             return None, "Unsupported file type or processing failed"
         
@@ -459,7 +459,7 @@ def upload_files_stream(collection_id):
                     sys.stderr.flush()
 
                     # Process the file
-                    doc_data = document_processor.process_single_file(temp_path)
+                    doc_data = document_processor.process_file(temp_path)
                     if not doc_data:
                         errors.append(f"{filename}: Unsupported file type or processing failed")
                         yield f"data: {json.dumps({'step': 'error', 'file': filename, 'error': 'Unsupported file type'})}\n\n"
@@ -764,20 +764,21 @@ def chat():
                         verified = False
                         
                 elif image_action == 'describe':
-                    # Generate description using CLIP
-                    image_embedding = document_processor.get_image_embedding(image_path)
-                    if image_embedding is not None:
-                        # Process the image to get description
-                        processed_image = document_processor.process_single_file(image_path)
-                        if processed_image:
-                            response_text = f"Image description: {processed_image['content']}"
-                            verified = True
-                        else:
-                            response_text = "Could not process the uploaded image."
-                            verified = False
-                    else:
-                        response_text = "Failed to analyze the image."
-                        verified = False
+                    # DISABLED: Image description using CLIP (multimodal processing disabled)
+                    # image_embedding = document_processor.get_image_embedding(image_path)
+                    # if image_embedding is not None:
+                    #     processed_image = document_processor.process_file(image_path)
+                    #     if processed_image:
+                    #         response_text = f"Image description: {processed_image['content']}"
+                    #         verified = True
+                    #     else:
+                    #         response_text = "Could not process the uploaded image."
+                    #         verified = False
+                    # else:
+                    #     response_text = "Failed to analyze the image."
+                    #     verified = False
+                    response_text = "Image description feature is currently disabled (multimodal processing not enabled)."
+                    verified = False
                 else:
                     response_text = 'Image uploaded successfully. What would you like to know about it?'
                     verified = True

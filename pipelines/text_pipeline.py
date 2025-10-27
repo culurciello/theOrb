@@ -5,8 +5,10 @@ import PyPDF2
 import markdown
 import re
 import torch
+import mimetypes
 from transformers import pipeline
 from .base_pipeline import BasePipeline
+from .chunk import HierarchicalChunker
 
 class TextPipeline(BasePipeline):
     """
@@ -21,6 +23,8 @@ class TextPipeline(BasePipeline):
         self._summarizer = None
         self._summarizer_device = None
         self._cuda_failed = False
+        # Initialize hierarchical chunker with 500 token chunks and 2 sentence overlap
+        self.hierarchical_chunker = HierarchicalChunker(chunk_tokens=500, overlap_sentences=2)
 
     def _read_text_file_with_encoding_detection(self, file_path: Path) -> str:
         """
@@ -118,12 +122,12 @@ class TextPipeline(BasePipeline):
     def process(self, file_path: str) -> Dict[str, Any]:
         """Process text file according to the pipeline specification."""
         file_path = Path(file_path)
-        
+
         # Extract text content
         content = self.extract_text_from_file(str(file_path))
-        
-        # Break into chunks using smart chunking
-        chunks = self.chunk_text_smart(content, chunk_tokens=500, overlap_tokens=50)
+
+        # Break into chunks using hierarchical layout-aware chunking
+        chunks = self.hierarchical_chunker.chunk_text(content)
 
         # Generate sentence embeddings for chunks using optimized batching
         embedding_list = self.get_sentence_embeddings(chunks)
@@ -137,14 +141,19 @@ class TextPipeline(BasePipeline):
         
         # Get category
         category = self.categorize_content(first_1000_words)
-        
+
+        # Get MIME type
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+
         return {
             'link_to_original_file': str(file_path),
-            'category': category,
+            'categories': category,  # Keep as 'categories' for consistency with routes.py
             'summary': summary,
             'embedding_list': embedding_list,
             'chunks': chunks,
+            'content': content,  # Full text content for storage
             'file_type': 'text',
+            'mime_type': mime_type,
             'metadata': {
                 'word_count': len(content.split()),
                 'chunk_count': len(chunks),

@@ -4,7 +4,7 @@ import re
 import logging
 from .base_agent import BaseAgent
 from vector_store import VectorStore
-from document_processor import DocumentProcessor
+from pipelines.document_processor import DocumentProcessor
 from .tools.tool_manager import ToolManager
 
 # Set up logger
@@ -166,23 +166,28 @@ Be conversational, helpful, and concise in your responses. Provide direct answer
             )
             
             # If we have text queries that could work with CLIP, try CLIP text search
+            # DISABLED: CLIP functionality not available (multimodal processing disabled)
             if not results or len(results) < n_results:
                 try:
-                    # Get CLIP text embedding for the query
-                    text_embedding = self.document_processor.get_text_embedding_for_image_search(query)
-                    if text_embedding is not None:
-                        clip_results = self.vector_store.search_similar_images_by_embedding(
-                            collection_name, 
-                            text_embedding,
-                            n_results=n_results
-                        )
-                        # Merge results, avoiding duplicates
-                        existing_paths = {r['metadata'].get('file_path') for r in results}
-                        for clip_result in clip_results:
-                            if clip_result['metadata'].get('file_path') not in existing_paths:
-                                results.append(clip_result)
-                                if len(results) >= n_results:
-                                    break
+                    # Check if CLIP method is available before calling
+                    if hasattr(self.document_processor, 'get_text_embedding_for_image_search'):
+                        # Get CLIP text embedding for the query
+                        text_embedding = self.document_processor.get_text_embedding_for_image_search(query)
+                        if text_embedding is not None:
+                            clip_results = self.vector_store.search_similar_images_by_embedding(
+                                collection_name,
+                                text_embedding,
+                                n_results=n_results
+                            )
+                            # Merge results, avoiding duplicates
+                            existing_paths = {r['metadata'].get('file_path') for r in results}
+                            for clip_result in clip_results:
+                                if clip_result['metadata'].get('file_path') not in existing_paths:
+                                    results.append(clip_result)
+                                    if len(results) >= n_results:
+                                        break
+                    else:
+                        print("CLIP text-to-image search not available (multimodal processing disabled)")
                 except Exception as clip_e:
                     print(f"CLIP search failed: {clip_e}")
             

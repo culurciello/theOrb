@@ -2,6 +2,7 @@ from typing import Dict, Any
 from pathlib import Path
 import pandas as pd
 import json
+import mimetypes
 from .base_pipeline import BasePipeline
 
 class TablePipeline(BasePipeline):
@@ -23,13 +24,20 @@ class TablePipeline(BasePipeline):
         
         # Generate embeddings for the summary
         embedding_list = self.get_sentence_embeddings([summary])
-        
+
+        # Get MIME type
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+
         return {
             'link_to_original_file': str(file_path),
             'json_data': table_json,
             'summary': summary,
+            'content': summary,  # Use summary as content for compatibility
+            'chunks': [summary],  # Single chunk with the summary for compatibility
+            'categories': ['table'],  # Default category
             'embedding_list': embedding_list,
             'file_type': 'table',
+            'mime_type': mime_type,
             'metadata': {
                 'file_extension': file_path.suffix,
                 'row_count': len(table_json.get('data', [])),
