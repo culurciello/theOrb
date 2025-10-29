@@ -74,7 +74,7 @@ class SearchClinicalTrialsTool(BaseTool):
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "Maximum number of results to retrieve (default: 10, max: 50)",
+                    "description": "Maximum number of results to retrieve (default: 10, max: 100)",
                     "default": 10
                 }
             },
