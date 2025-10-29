@@ -6,9 +6,6 @@ import time
 import shutil
 import uuid
 from pathlib import Path
-from urllib.parse import quote, urlencode
-
-
 class SearchClinicalTrialsTool(BaseTool):
     """Tool for searching ClinicalTrials.gov database."""
 
