@@ -7,6 +7,7 @@ from .search_pubmed_tool import SearchPubmedTool
 from .search_arxiv_tool import SearchArxivTool
 from .search_lii_tool import SearchLIITool
 from .search_doaj_tool import SearchDOAJTool
+from .search_clinical_trials_tool import SearchClinicalTrialsTool
 
 
 class ToolManager:
@@ -24,6 +25,7 @@ class ToolManager:
         self.register_tool(SearchArxivTool())
         self.register_tool(SearchLIITool())
         self.register_tool(SearchDOAJTool())
+        self.register_tool(SearchClinicalTrialsTool())
 
     def register_tool(self, tool: BaseTool):
         """Register a tool."""

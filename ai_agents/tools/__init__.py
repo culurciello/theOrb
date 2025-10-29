@@ -12,6 +12,7 @@ from .search_pubmed_tool import SearchPubmedTool
 from .search_arxiv_tool import SearchArxivTool
 from .search_lii_tool import SearchLIITool
 from .search_doaj_tool import SearchDOAJTool
+from .search_clinical_trials_tool import SearchClinicalTrialsTool
 from .tool_manager import ToolManager
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     'SearchArxivTool',
     'SearchLIITool',
     'SearchDOAJTool',
+    'SearchClinicalTrialsTool',
     'ToolManager'
 ]

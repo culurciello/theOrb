@@ -768,6 +768,28 @@ class OrvinApp {
             };
         }
 
+        // Detect DOAJ search
+        if (messageLower.includes('search doaj') || messageLower.includes('doaj search') ||
+            (messageLower.includes('doaj') && (messageLower.includes('articles') || messageLower.includes('journals')))) {
+            return {
+                title: 'Searching DOAJ...',
+                message: 'Searching Directory of Open Access Journals',
+                submessage: 'This may take 1-2 minutes depending on the number of articles'
+            };
+        }
+
+        // Detect Clinical Trials search
+        if (messageLower.includes('search clinical trials') || messageLower.includes('clinical trials search') ||
+            messageLower.includes('clinicaltrials.gov') || 
+            (messageLower.includes('clinical') && messageLower.includes('trials')) ||
+            (messageLower.includes('clinical') && messageLower.includes('studies'))) {
+            return {
+                title: 'Searching Clinical Trials...',
+                message: 'Searching ClinicalTrials.gov database',
+                submessage: 'This may take 1-2 minutes depending on the number of studies'
+            };
+        }
+
         // Detect calculation
         if (messageLower.includes('calculate') || messageLower.includes('compute') ||
             /\d+\s*[\+\-\*\/]\s*\d+/.test(message)) {
@@ -2314,6 +2336,121 @@ class OrvinApp {
         }
     }
 
+    // Clinical Trials Search Modal Functions
+    openClinicalTrialsSearchModal() {
+        const modal = document.getElementById('clinicalTrialsSearchModal');
+        if (modal) {
+            modal.style.display = 'flex';
+            // Add click outside to close
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    this.closeClinicalTrialsSearchModal();
+                }
+            };
+        }
+    }
+
+    closeClinicalTrialsSearchModal() {
+        const modal = document.getElementById('clinicalTrialsSearchModal');
+        if (modal) {
+            modal.style.display = 'none';
+            // Clear form
+            document.getElementById('clinicalTrialsQuery').value = '';
+            document.getElementById('clinicalTrialsCollectionName').value = '';
+            document.getElementById('clinicalTrialsSearchField').value = 'all';
+            document.getElementById('clinicalTrialsStatus').value = 'all';
+            document.getElementById('clinicalTrialsMaxResults').value = '10';
+        }
+    }
+
+    async submitClinicalTrialsSearch() {
+        const query = document.getElementById('clinicalTrialsQuery').value.trim();
+        const collectionName = document.getElementById('clinicalTrialsCollectionName').value.trim();
+        const searchField = document.getElementById('clinicalTrialsSearchField').value;
+        const status = document.getElementById('clinicalTrialsStatus').value;
+        const maxResults = parseInt(document.getElementById('clinicalTrialsMaxResults').value) || 10;
+
+        if (!query) {
+            this.showNotification('Please enter a search query', 'error');
+            return;
+        }
+
+        // Close modal
+        this.closeClinicalTrialsSearchModal();
+
+        // Build message to send to agent
+        let message = `Search clinical trials for "${query}" with search_field ${searchField}`;
+        if (status !== 'all') {
+            message += ` and status ${status}`;
+        }
+        message += ` and max_results ${maxResults}`;
+        if (collectionName) {
+            message += ` and save to collection named "${collectionName}"`;
+        }
+
+        // Add to chat as user message
+        const userMessage = { role: 'user', text: message };
+        this.state.chatMessages.push(userMessage);
+        this.renderChatMessages();
+
+        // Show loading overlay
+        this.showLoadingOverlay(
+            'Searching Clinical Trials...',
+            'Searching ClinicalTrials.gov database for clinical studies',
+            'This may take 1-2 minutes'
+        );
+
+        try {
+            // Send message to agent
+            const response = await this.sendChatMessage(
+                message,
+                this.state.currentConversationId,
+                this.state.activeCollectionId,
+                this.state.selectedAgentId
+            );
+
+            this.hideLoadingOverlay();
+
+            // Update conversation ID
+            if (response.conversation_id) {
+                this.state.currentConversationId = response.conversation_id;
+                await this.loadConversations();
+            }
+
+            // Add agent response
+            const assistantMessage = {
+                role: 'assistant',
+                text: response.response || 'Clinical trials search completed.',
+                cites: response.citations || [],
+                documentReferences: response.document_references || []
+            };
+            this.state.chatMessages.push(assistantMessage);
+            this.renderChatMessages();
+
+            // Reload collections to show the new one
+            this.showNotification('Refreshing collection list...', 'info');
+            setTimeout(async () => {
+                await this.loadCollections();
+                this.renderCollections();
+                this.updateSelectors();
+                this.showNotification('Collection list updated! Check the collections tab.', 'success');
+            }, 1000);
+
+        } catch (error) {
+            this.hideLoadingOverlay();
+            console.error('Error in Clinical Trials search:', error);
+            this.showNotification(`Error: ${error.message}`, 'error');
+
+            const errorMessage = {
+                role: 'assistant',
+                text: 'Sorry, there was an error with the Clinical Trials search. Please try again.',
+                cites: []
+            };
+            this.state.chatMessages.push(errorMessage);
+            this.renderChatMessages();
+        }
+    }
+
     // Event Listeners
     setupEventListeners() {
         // Message input enter key
@@ -2715,6 +2852,9 @@ window.submitLIISearch = () => app.submitLIISearch();
 window.openDOAJSearchModal = () => app.openDOAJSearchModal();
 window.closeDOAJSearchModal = () => app.closeDOAJSearchModal();
 window.submitDOAJSearch = () => app.submitDOAJSearch();
+window.openClinicalTrialsSearchModal = () => app.openClinicalTrialsSearchModal();
+window.closeClinicalTrialsSearchModal = () => app.closeClinicalTrialsSearchModal();
+window.submitClinicalTrialsSearch = () => app.submitClinicalTrialsSearch();
 window.refreshCollectionsList = () => app.refreshCollectionsList();
 window.viewDocument = (docId, filename, url) => app.viewDocument(docId, filename, url);
 
