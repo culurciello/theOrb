@@ -25,7 +25,6 @@ import json
 import csv
 import sys
 from typing import Dict, List, Optional, Any
-from urllib.parse import urlencode
 import requests
 from datetime import datetime
 
