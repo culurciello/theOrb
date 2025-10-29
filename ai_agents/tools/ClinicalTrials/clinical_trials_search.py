@@ -26,7 +26,6 @@ import csv
 import sys
 from typing import Dict, List, Optional, Any
 import requests
-from datetime import datetime
 
 
 class ClinicalTrialsSearcher:
